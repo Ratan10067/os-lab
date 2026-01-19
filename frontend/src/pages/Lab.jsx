@@ -1,10 +1,12 @@
-import { useRef, useCallback, useState } from "react";
+import { useRef, useCallback, useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { RefreshCw, Maximize2, Info } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar, { labs } from "../components/Sidebar";
 import Terminal from "../components/Terminal";
 import useWebSocket from "../hooks/useWebSocket";
+import { useAuth } from "../context/AuthContext";
+import { BACKEND_URL } from "../config";
 
 // Lab instructions content
 const labInstructions = {
@@ -18,102 +20,41 @@ const labInstructions = {
       "View file contents with `cat test.txt`",
       "Navigate directories with `cd` command",
     ],
-    commands: ["pwd", "ls", "cd", "cat", "echo", "mkdir", "rm", "cp", "mv"],
   },
-  processes: {
+  "process-management": {
     title: "Process Management",
-    description: "Understand how processes work in Linux.",
+    description: "Understand how processes working in Linux.",
     steps: [
-      "Run `ps aux` to see all running processes",
-      "Use `top` or `htop` for real-time process monitoring",
+      "Run `ps aux` to view running processes",
       "Start a background process with `sleep 100 &`",
-      "Find process ID with `pgrep sleep`",
-      "Terminate a process with `kill <PID>`",
-    ],
-    commands: [
-      "ps",
-      "top",
-      "htop",
-      "kill",
-      "pgrep",
-      "jobs",
-      "fg",
-      "bg",
-      "nohup",
+      "View jobs with `jobs` command",
+      "Kill a process using `kill <pid>`",
+      "Monitor resources with `top` or `htop`",
     ],
   },
-  filesystem: {
+  "file-system": {
     title: "File System",
-    description: "Explore the Linux filesystem structure.",
+    description: "Explore Linux file permissions and structure.",
     steps: [
-      "Navigate to root with `cd /`",
-      "Explore `/proc` - the virtual filesystem for processes",
-      "Check `/etc` for system configuration files",
-      "Use `df -h` to see disk usage",
-      'Find files with `find / -name "*.conf"`',
+      "Check file permissions with `ls -l`",
+      "Modify permissions with `chmod 777 test.txt`",
+      "Create a directory with `mkdir mydir`",
+      "Create a deep structure with `mkdir -p a/b/c`",
+      "View directory tree with `tree`",
     ],
-    commands: ["ls", "cd", "find", "df", "du", "mount", "stat", "file"],
   },
-  scheduling: {
+  "cpu-scheduling": {
     title: "CPU Scheduling",
     description: "Learn about process priority and scheduling.",
     steps: [
-      "View process priorities with `ps -eo pid,ni,comm`",
-      "Start a low-priority process with `nice -n 10 command`",
+      "Run `nice -n 10 sleep 100 &`",
+      "Check priority with `ps -l`",
       "Change priority with `renice`",
-      "Observe scheduling with `top` (press 1 for CPU details)",
+      "View system load with `uptime`",
+      "Compare process states",
     ],
-    commands: ["nice", "renice", "ps", "top", "time"],
-  },
-  memory: {
-    title: "Memory Management",
-    description: "Understand memory usage and virtual memory.",
-    steps: [
-      "Check memory usage with `free -h`",
-      "View detailed memory info in `/proc/meminfo`",
-      "See per-process memory with `ps aux --sort=-%mem`",
-      "Observe memory mapping with `cat /proc/self/maps`",
-    ],
-    commands: ["free", "vmstat", "cat /proc/meminfo", "ps", "pmap"],
-  },
-  ipc: {
-    title: "IPC & Signals",
-    description: "Learn inter-process communication and signals.",
-    steps: [
-      "Send a signal with `kill -SIGTERM <PID>`",
-      "List all signals with `kill -l`",
-      "Create a pipe: `ls | grep txt`",
-      "Use named pipes with `mkfifo`",
-    ],
-    commands: ["kill", "trap", "mkfifo", "ipcs", "ipcrm"],
-  },
-  permissions: {
-    title: "Permissions & Security",
-    description: "Understand file permissions and security.",
-    steps: [
-      "View permissions with `ls -la`",
-      "Change permissions with `chmod 755 file`",
-      "Understand owner/group with `chown`",
-      "Check your user/groups with `id`",
-    ],
-    commands: ["chmod", "chown", "chgrp", "id", "whoami", "groups"],
-  },
-  disk: {
-    title: "Disk Management",
-    description: "Learn disk and storage management.",
-    steps: [
-      "Check disk space with `df -h`",
-      "Find large files with `du -sh *`",
-      "View block devices with `lsblk`",
-      "Check disk I/O with `iostat`",
-    ],
-    commands: ["df", "du", "lsblk", "fdisk", "mount", "umount"],
   },
 };
-
-// Get backend URL from environment or use default
-const BACKEND_URL =
-  import.meta.env.VITE_BACKEND_URL || "ws://localhost:8000/ws";
 
 function Lab() {
   const { labId } = useParams();
@@ -122,14 +63,26 @@ function Lab() {
   const terminalContainerRef = useRef(null);
   const [sessionId] = useState(() => crypto.randomUUID());
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const { user } = useAuth();
 
   const activeLab = labId || "shell-basics";
   const currentLabInfo =
     labInstructions[activeLab] || labInstructions["shell-basics"];
 
-  // WebSocket connection
+  // WebSocket connection with token
+  const token = localStorage.getItem("auth_token");
+  const wsUrl = token
+    ? `${BACKEND_URL}?session=${sessionId}&token=${token}`
+    : `${BACKEND_URL}?session=${sessionId}`;
+
+  // Use a ref to prevent reconnection loop when url changes slightly
+  const wsUrlRef = useRef(wsUrl);
+  if (token && !wsUrlRef.current.includes("token")) {
+    wsUrlRef.current = `${BACKEND_URL}?session=${sessionId}&token=${token}`;
+  }
+
   const { isConnected, error, sendMessage, setMessageHandler, reconnect } =
-    useWebSocket(`${BACKEND_URL}?session=${sessionId}`);
+    useWebSocket(wsUrlRef.current);
 
   // Handle incoming data from server
   setMessageHandler(
@@ -192,18 +145,18 @@ function Lab() {
 
         <main className="lab-main">
           <header className="lab-header">
-            <h2 className="lab-header-title">{currentLabInfo.title}</h2>
-            <div className="lab-header-status">
-              <div
-                className="dot"
-                style={{
-                  background: isConnected
-                    ? "var(--accent-green)"
-                    : "var(--accent-red)",
-                }}
-              ></div>
-              <span>{isConnected ? "Connected" : "Disconnected"}</span>
+            <div className="lab-status">
+              <span
+                className={`status-dot ${isConnected ? "connected" : "disconnected"}`}
+              ></span>
+              <span className="status-text">
+                {isConnected
+                  ? `Connected${user ? ` (${user.username})` : ""}`
+                  : "Disconnected"}
+              </span>
+            </div>
 
+            <div className="lab-actions">
               <button
                 className="btn btn-ghost"
                 onClick={handleRefresh}
@@ -237,13 +190,6 @@ function Lab() {
             >
               <Info size={16} />
               {error}
-              <button
-                className="btn btn-secondary"
-                style={{ marginLeft: "auto", padding: "0.25rem 0.75rem" }}
-                onClick={reconnect}
-              >
-                Retry
-              </button>
             </div>
           )}
 
@@ -269,49 +215,64 @@ function Lab() {
 
               <h4
                 style={{
-                  fontSize: "0.85rem",
-                  color: "var(--text-secondary)",
                   marginTop: "1.5rem",
-                  marginBottom: "0.75rem",
+                  marginBottom: "1rem",
+                  color: "var(--text-secondary)",
+                  fontSize: "0.9rem",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
                 }}
               >
                 Try These Steps:
               </h4>
-              <ul>
-                {currentLabInfo.steps.map((step, i) => (
-                  <li key={i}>{step}</li>
+
+              <ul
+                style={{
+                  paddingLeft: "1.25rem",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                {currentLabInfo.steps.map((step, index) => (
+                  <li key={index} style={{ marginBottom: "0.5rem" }}>
+                    {step.split("`").map((part, i) =>
+                      i % 2 === 1 ? (
+                        <code key={i} className="inline-code">
+                          {part}
+                        </code>
+                      ) : (
+                        part
+                      ),
+                    )}
+                  </li>
                 ))}
               </ul>
 
-              <h4
-                style={{
-                  fontSize: "0.85rem",
-                  color: "var(--text-secondary)",
-                  marginTop: "1.5rem",
-                  marginBottom: "0.75rem",
-                }}
-              >
-                Useful Commands:
-              </h4>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
-                {currentLabInfo.commands.map((cmd, i) => (
-                  <code
-                    key={i}
-                    style={{
-                      display: "inline-block",
-                      padding: "0.25rem 0.5rem",
-                      cursor: "pointer",
-                    }}
-                    onClick={() => {
-                      if (terminalRef.current) {
-                        sendMessage(cmd + "\r");
-                      }
-                    }}
-                    title="Click to run"
-                  >
-                    {cmd}
-                  </code>
-                ))}
+              <div className="instruction-card" style={{ marginTop: "2rem" }}>
+                <h4>Useful Commands:</h4>
+                <div
+                  style={{
+                    display: "flex",
+                    gap: "0.5rem",
+                    flexWrap: "wrap",
+                    marginTop: "0.5rem",
+                  }}
+                >
+                  {[
+                    "pwd",
+                    "ls",
+                    "cd",
+                    "cat",
+                    "echo",
+                    "mkdir",
+                    "rm",
+                    "cp",
+                    "mv",
+                  ].map((cmd) => (
+                    <code key={cmd} className="cmd-tag">
+                      {cmd}
+                    </code>
+                  ))}
+                </div>
               </div>
             </aside>
           </div>

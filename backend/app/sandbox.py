@@ -16,8 +16,9 @@ class Sandbox:
     A sandboxed shell environment for terminal sessions.
     """
     
-    def __init__(self, session_id: str):
+    def __init__(self, session_id: str, user_folder: Optional[str] = None):
         self.session_id = session_id
+        self.user_folder = user_folder
         self.process: Optional[asyncio.subprocess.Process] = None
         self.master_fd: Optional[int] = None
         self.slave_fd: Optional[int] = None
@@ -36,15 +37,19 @@ class Sandbox:
         # Prepare environment
         env = os.environ.copy()
         
+        # Determine working directory
+        work_dir = self.user_folder if self.user_folder and os.path.exists(self.user_folder) else None
+        
         # Build command - use proot if available and rootfs exists
         rootfs_path = '/app/rootfs'
         use_proot = os.path.exists('/usr/bin/proot') and os.path.isdir(rootfs_path)
         
         if use_proot:
             # Docker/Linux environment with proot
+            home_dir = self.user_folder or '/home/user'
             env.update({
                 'TERM': 'xterm-256color',
-                'HOME': '/home/user',
+                'HOME': home_dir,
                 'USER': 'user',
                 'SHELL': '/bin/bash',
                 'PS1': '\\[\\033[32m\\]user@oslab\\[\\033[0m\\]:\\[\\033[34m\\]\\w\\[\\033[0m\\]\\$ ',
@@ -53,7 +58,7 @@ class Sandbox:
             cmd = [
                 '/usr/bin/proot',
                 '-r', rootfs_path,
-                '-w', '/home/user',
+                '-w', home_dir,
                 '-0',
                 '/bin/bash', '--login'
             ]
@@ -61,9 +66,12 @@ class Sandbox:
         else:
             # Local development (macOS/Linux without proot)
             env['TERM'] = 'xterm-256color'
+            if self.user_folder:
+                os.makedirs(self.user_folder, exist_ok=True)
+                env['HOME'] = self.user_folder
             shell = '/bin/zsh' if os.path.exists('/bin/zsh') else '/bin/bash'
             cmd = [shell]
-            logger.info(f"Starting {shell} for session {self.session_id}")
+            logger.info(f"Starting {shell} for session {self.session_id}, folder: {self.user_folder or 'default'}")
         
         # Start the process
         self.process = await asyncio.create_subprocess_exec(

@@ -38,7 +38,7 @@ class SessionManager:
         self._cleanup_task: Optional[asyncio.Task] = None
         self._lock = asyncio.Lock()
     
-    async def create_session(self, session_id: Optional[str] = None) -> Session:
+    async def create_session(self, session_id: Optional[str] = None, user_folder: Optional[str] = None) -> Session:
         """Create a new terminal session"""
         async with self._lock:
             # Check session limit
@@ -59,8 +59,8 @@ class SessionManager:
                 session.touch()
                 return session
             
-            # Create new sandbox and session
-            sandbox = Sandbox(session_id)
+            # Create new sandbox and session with optional user folder
+            sandbox = Sandbox(session_id, user_folder)
             await sandbox.start()
             
             session = Session(id=session_id, sandbox=sandbox)

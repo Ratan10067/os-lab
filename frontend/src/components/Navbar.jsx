@@ -1,47 +1,60 @@
-import { Link, useLocation } from "react-router-dom";
-import { Terminal, BookOpen, LogIn, Github } from "lucide-react";
+import { Link } from "react-router-dom";
+import { Terminal, Github, User, LogOut } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 
 function Navbar() {
-  const location = useLocation();
-  const isLabPage = location.pathname.startsWith("/lab");
+  const { user, logout } = useAuth();
 
   return (
     <nav className="navbar">
-      <div className="container navbar-content">
-        <Link to="/" className="navbar-logo">
-          <Terminal size={24} />
-          <span>OS Lab</span>
+      <div className="navbar-content">
+        <Link to="/" className="navbar-brand">
+          <Terminal className="brand-icon" size={24} />
+          <span className="brand-text">OS Lab</span>
         </Link>
 
-        <div className="navbar-links">
-          <Link
-            to="/lab"
-            className={`navbar-link ${isLabPage ? "active" : ""}`}
-          >
-            <BookOpen
-              size={18}
-              style={{ marginRight: "6px", verticalAlign: "middle" }}
-            />
-            Labs
-          </Link>
-
+        <div className="navbar-actions">
           <a
             href="https://github.com/Ratan10067/os-lab"
             target="_blank"
             rel="noopener noreferrer"
             className="navbar-link"
           >
-            <Github
-              size={18}
-              style={{ marginRight: "6px", verticalAlign: "middle" }}
-            />
-            GitHub
+            <Github size={20} />
+            <span>GitHub</span>
           </a>
 
-          <Link to="/login" className="btn btn-secondary">
-            <LogIn size={18} />
-            Login
-          </Link>
+          {user ? (
+            <div
+              className="user-menu"
+              style={{ display: "flex", alignItems: "center", gap: "1rem" }}
+            >
+              <span
+                className="user-name"
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: "0.5rem",
+                  color: "var(--text-secondary)",
+                }}
+              >
+                <User size={18} />
+                {user.username}
+              </span>
+              <button
+                onClick={logout}
+                className="btn btn-secondary btn-sm"
+                style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
+              >
+                <LogOut size={16} />
+                Logout
+              </button>
+            </div>
+          ) : (
+            <Link to="/login" className="btn btn-primary btn-sm">
+              Login
+            </Link>
+          )}
         </div>
       </div>
     </nav>

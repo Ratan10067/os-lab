@@ -15,15 +15,15 @@ class WebSocketManager:
     def __init__(self, session_manager: SessionManager):
         self.session_manager = session_manager
     
-    async def handle_connection(self, websocket: WebSocket, session_id: Optional[str]):
+    async def handle_connection(self, websocket: WebSocket, session_id: Optional[str], user_folder: Optional[str] = None):
         """Handle a new WebSocket connection"""
         await websocket.accept()
         
         session: Optional[Session] = None
         
         try:
-            # Create or get session
-            session = await self.session_manager.create_session(session_id)
+            # Create or get session with optional user folder
+            session = await self.session_manager.create_session(session_id, user_folder)
             logger.info(f"WebSocket connected for session {session.id}")
             
             # Set up output callback to send data to client
