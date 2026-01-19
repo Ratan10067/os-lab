@@ -13,9 +13,13 @@ import {
   Clock,
   Users,
   Code2,
+  User,
+  LogOut,
 } from "lucide-react";
+import { useAuth } from "../context/AuthContext";
 
 function Home() {
+  const { user, logout } = useAuth();
   const features = [
     {
       icon: Terminal,
@@ -76,6 +80,13 @@ function Home() {
 
             {/* Actions */}
             <div className="flex items-center gap-3">
+              <Link
+                to="/courses"
+                className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all"
+              >
+                <BookOpen size={18} />
+                <span className="text-sm">Learn</span>
+              </Link>
               <a
                 href="https://github.com/Ratan10067/os-lab"
                 target="_blank"
@@ -85,18 +96,38 @@ function Home() {
                 <Github size={18} />
                 <span className="text-sm">GitHub</span>
               </a>
-              <Link
-                to="/login"
-                className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors"
-              >
-                Login
-              </Link>
-              <Link
-                to="/signup"
-                className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors"
-              >
-                Sign Up
-              </Link>
+              {user ? (
+                <div className="flex items-center gap-3">
+                  <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-white/5 border border-white/10">
+                    <User size={14} className="text-emerald-400" />
+                    <span className="text-sm text-slate-300">
+                      {user.username}
+                    </span>
+                  </div>
+                  <button
+                    onClick={logout}
+                    className="p-2 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
+                    title="Logout"
+                  >
+                    <LogOut size={18} />
+                  </button>
+                </div>
+              ) : (
+                <>
+                  <Link
+                    to="/login"
+                    className="px-4 py-2 text-sm font-medium text-slate-300 hover:text-white transition-colors"
+                  >
+                    Login
+                  </Link>
+                  <Link
+                    to="/signup"
+                    className="px-4 py-2 text-sm font-medium bg-emerald-600 hover:bg-emerald-500 rounded-lg transition-colors"
+                  >
+                    Sign Up
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>

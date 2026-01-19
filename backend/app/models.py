@@ -42,3 +42,23 @@ class UserDocument(BaseModel):
     last_active: Optional[datetime] = None
     email_verified: bool = False  # For future OTP verification
 
+
+# ===== Progress Tracking Models =====
+
+class LessonComplete(BaseModel):
+    """Schema for marking a lesson complete"""
+    course_id: str
+    lesson_id: str
+
+
+class ProgressResponse(BaseModel):
+    """Schema for user progress response"""
+    completed_lessons: list[str] = []  # List of "courseId:lessonId" strings
+    last_updated: Optional[datetime] = None
+
+
+class ProgressDocument(BaseModel):
+    """Schema for progress document in MongoDB"""
+    user_id: str
+    completed_lessons: list[str] = []  # List of "courseId:lessonId" strings
+    last_updated: datetime = Field(default_factory=datetime.utcnow)

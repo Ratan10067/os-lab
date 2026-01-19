@@ -7,8 +7,9 @@ import logging
 from .websocket import WebSocketManager
 from .sessions import SessionManager
 from .database import Database
-from .models import UserCreate, UserLogin, TokenResponse, UserResponse
+from .models import UserCreate, UserLogin, TokenResponse, UserResponse, LessonComplete, ProgressResponse
 from .auth import create_user, authenticate_user, require_auth, get_current_user
+from .database import get_database
 from .config import get_settings
 
 # Configure logging
@@ -130,6 +131,53 @@ async def get_me(user: dict = Depends(require_auth)):
     )
 
 
+# ===== Progress Endpoints =====
+
+@app.get("/api/progress", response_model=ProgressResponse)
+async def get_progress(user: dict = Depends(require_auth)):
+    """Get user's learning progress"""
+    from datetime import datetime
+    db = get_database()
+    user_id = str(user["_id"])
+    
+    progress = await db.progress.find_one({"user_id": user_id})
+    
+    if not progress:
+        return ProgressResponse(completed_lessons=[], last_updated=None)
+    
+    return ProgressResponse(
+        completed_lessons=progress.get("completed_lessons", []),
+        last_updated=progress.get("last_updated")
+    )
+
+
+@app.post("/api/progress/complete", response_model=ProgressResponse)
+async def complete_lesson(data: LessonComplete, user: dict = Depends(require_auth)):
+    """Mark a lesson as complete"""
+    from datetime import datetime
+    db = get_database()
+    user_id = str(user["_id"])
+    lesson_key = f"{data.course_id}:{data.lesson_id}"
+    
+    # Upsert progress document
+    result = await db.progress.update_one(
+        {"user_id": user_id},
+        {
+            "$addToSet": {"completed_lessons": lesson_key},
+            "$set": {"last_updated": datetime.utcnow()}
+        },
+        upsert=True
+    )
+    
+    # Fetch updated progress
+    progress = await db.progress.find_one({"user_id": user_id})
+    
+    logger.info(f"User {user['username']} completed lesson: {lesson_key}")
+    
+    return ProgressResponse(
+        completed_lessons=progress.get("completed_lessons", []),
+        last_updated=progress.get("last_updated")
+    )
 # ===== General Endpoints =====
 
 @app.get("/")
