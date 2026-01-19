@@ -10,6 +10,7 @@ import {
   LogOut,
   User,
   ChevronRight,
+  Loader,
 } from "lucide-react";
 import Navbar from "../components/Navbar";
 import Sidebar, { labs } from "../components/Sidebar";
@@ -74,6 +75,7 @@ function Lab() {
   const [sessionId] = useState(() => crypto.randomUUID());
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [retryCount, setRetryCount] = useState(0);
+  const [hasConnectedOnce, setHasConnectedOnce] = useState(false);
   const { user, logout } = useAuth();
 
   const activeLab = labId || "shell-basics";
@@ -166,6 +168,13 @@ function Lab() {
     logout();
     navigate("/login");
   };
+
+  // Track when first connected
+  useEffect(() => {
+    if (isConnected && !hasConnectedOnce) {
+      setHasConnectedOnce(true);
+    }
+  }, [isConnected, hasConnectedOnce]);
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white">
@@ -290,26 +299,61 @@ function Lab() {
               {!isConnected && (
                 <div className="absolute inset-0 bg-[#0a0a0f]/95 backdrop-blur-sm z-10 flex items-center justify-center">
                   <div className="text-center p-8 max-w-md">
-                    <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
-                      <WifiOff size={28} className="text-red-400" />
-                    </div>
-                    <h2 className="text-xl font-bold text-white mb-2">
-                      Connection Lost
-                    </h2>
-                    <p className="text-slate-400 text-sm mb-6">
-                      {error ||
-                        "Unable to connect to the terminal server. Please check your connection and try again."}
-                    </p>
-                    <button
-                      onClick={handleRefresh}
-                      className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl transition-colors"
-                    >
-                      <RefreshCw size={16} />
-                      Retry Connection
-                    </button>
-                    <p className="text-xs text-slate-500 mt-4">
-                      Retry attempts: {retryCount}
-                    </p>
+                    {!hasConnectedOnce ? (
+                      // Initial connecting state
+                      <>
+                        <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center">
+                          <Loader
+                            size={28}
+                            className="text-emerald-400 animate-spin"
+                          />
+                        </div>
+                        <h2 className="text-xl font-bold text-white mb-2">
+                          Connecting to Terminal
+                        </h2>
+                        <p className="text-slate-400 text-sm mb-4">
+                          Setting up your secure sandbox environment...
+                        </p>
+                        <div className="flex items-center justify-center gap-1.5">
+                          <div
+                            className="w-2 h-2 rounded-full bg-emerald-500 animate-bounce"
+                            style={{ animationDelay: "0ms" }}
+                          />
+                          <div
+                            className="w-2 h-2 rounded-full bg-emerald-500 animate-bounce"
+                            style={{ animationDelay: "150ms" }}
+                          />
+                          <div
+                            className="w-2 h-2 rounded-full bg-emerald-500 animate-bounce"
+                            style={{ animationDelay: "300ms" }}
+                          />
+                        </div>
+                      </>
+                    ) : (
+                      // Disconnected state (was connected before)
+                      <>
+                        <div className="w-16 h-16 mx-auto mb-6 rounded-2xl bg-red-500/10 border border-red-500/20 flex items-center justify-center">
+                          <WifiOff size={28} className="text-red-400" />
+                        </div>
+                        <h2 className="text-xl font-bold text-white mb-2">
+                          Connection Lost
+                        </h2>
+                        <p className="text-slate-400 text-sm mb-6">
+                          {error ||
+                            "Unable to connect to the terminal server. Please check your connection and try again."}
+                        </p>
+                        <button
+                          onClick={handleRefresh}
+                          className="inline-flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white font-medium rounded-xl transition-colors"
+                        >
+                          <RefreshCw size={16} />
+                          Retry Connection
+                        </button>
+                        <p className="text-xs text-slate-500 mt-4">
+                          Retry attempts: {retryCount}
+                        </p>
+                      </>
+                    )}
                   </div>
                 </div>
               )}

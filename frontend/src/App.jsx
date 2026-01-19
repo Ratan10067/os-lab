@@ -7,8 +7,17 @@ import Courses from "./pages/Courses";
 import CourseDetail from "./pages/CourseDetail";
 import Lesson from "./pages/Lesson";
 import ProtectedRoute from "./components/ProtectedRoute";
+import LoadingScreen from "./components/LoadingScreen";
+import { useAuth } from "./context/AuthContext";
 
 function App() {
+  const { loading } = useAuth();
+
+  // Show loading screen during initial auth check
+  if (loading) {
+    return <LoadingScreen />;
+  }
+
   return (
     <Routes>
       <Route path="/" element={<Home />} />
