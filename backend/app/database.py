@@ -1,6 +1,8 @@
 from motor.motor_asyncio import AsyncIOMotorClient
 from typing import Optional
 import logging
+import ssl
+import certifi
 
 from .config import get_settings
 
@@ -16,7 +18,11 @@ class Database:
     async def connect(cls):
         """Connect to MongoDB"""
         try:
-            cls.client = AsyncIOMotorClient(settings.mongodb_url)
+            # Use certifi for SSL certificates (fixes macOS SSL issues)
+            cls.client = AsyncIOMotorClient(
+                settings.mongodb_url,
+                tlsCAFile=certifi.where()
+            )
             # Verify connection
             await cls.client.admin.command('ping')
             logger.info("Connected to MongoDB")

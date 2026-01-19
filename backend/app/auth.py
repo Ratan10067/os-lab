@@ -1,7 +1,7 @@
 import os
 from datetime import datetime, timedelta
 from typing import Optional
-from passlib.context import CryptContext
+import bcrypt
 from jose import JWTError, jwt
 from fastapi import HTTPException, status, Depends
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -14,24 +14,27 @@ from .models import UserCreate, UserDocument, UserResponse, TokenResponse
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# Password hashing
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
-
 # JWT Bearer
 security = HTTPBearer(auto_error=False)
 
-# Users folder base path
-USERS_BASE_PATH = "/home/users"
+# Users folder base path - use /tmp for development on macOS
+USERS_BASE_PATH = os.environ.get("USERS_BASE_PATH", "/tmp/oslab_users")
 
 
 def hash_password(password: str) -> str:
-    """Hash a password"""
-    return pwd_context.hash(password)
+    """Hash a password using bcrypt"""
+    # Encode password to bytes and hash
+    password_bytes = password.encode('utf-8')
+    salt = bcrypt.gensalt()
+    hashed = bcrypt.hashpw(password_bytes, salt)
+    return hashed.decode('utf-8')
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
     """Verify a password against hash"""
-    return pwd_context.verify(plain_password, hashed_password)
+    password_bytes = plain_password.encode('utf-8')
+    hashed_bytes = hashed_password.encode('utf-8')
+    return bcrypt.checkpw(password_bytes, hashed_bytes)
 
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
@@ -104,7 +107,13 @@ async def require_auth(credentials: HTTPAuthorizationCredentials = Depends(secur
 
 async def create_user(user_data: UserCreate) -> TokenResponse:
     """Create a new user"""
-    db = get_database()
+    try:
+        db = get_database()
+    except RuntimeError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database connection unavailable. Please try again later."
+        )
     
     # Check if username exists
     existing = await db.users.find_one({"username": user_data.username})
@@ -114,12 +123,21 @@ async def create_user(user_data: UserCreate) -> TokenResponse:
             detail="Username already exists"
         )
     
+    # Check if email exists
+    existing_email = await db.users.find_one({"email": user_data.email})
+    if existing_email:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Email already registered"
+        )
+    
     # Create user folder path
     folder_path = f"{USERS_BASE_PATH}/{user_data.username}"
     
     # Create user document
     user_doc = UserDocument(
         username=user_data.username,
+        email=user_data.email,
         password_hash=hash_password(user_data.password),
         folder_path=folder_path,
         created_at=datetime.utcnow()
@@ -127,6 +145,13 @@ async def create_user(user_data: UserCreate) -> TokenResponse:
     
     # Insert into database
     result = await db.users.insert_one(user_doc.model_dump())
+    
+    # Create indexes for username and email (unique)
+    try:
+        await db.users.create_index("username", unique=True)
+        await db.users.create_index("email", unique=True)
+    except Exception as e:
+        logger.debug(f"Index already exists or creation failed: {e}")
     
     # Create user folder on filesystem
     try:
@@ -142,13 +167,14 @@ async def create_user(user_data: UserCreate) -> TokenResponse:
     # Generate token
     access_token = create_access_token(data={"sub": user_data.username})
     
-    logger.info(f"Created user: {user_data.username}")
+    logger.info(f"Created user: {user_data.username} ({user_data.email})")
     
     return TokenResponse(
         access_token=access_token,
         user=UserResponse(
             id=str(result.inserted_id),
             username=user_data.username,
+            email=user_data.email,
             created_at=user_doc.created_at,
             folder_path=folder_path
         )
@@ -157,7 +183,13 @@ async def create_user(user_data: UserCreate) -> TokenResponse:
 
 async def authenticate_user(username: str, password: str) -> TokenResponse:
     """Authenticate user and return token"""
-    db = get_database()
+    try:
+        db = get_database()
+    except RuntimeError:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Database connection unavailable. Please try again later."
+        )
     
     user = await db.users.find_one({"username": username})
     if not user:
@@ -188,6 +220,7 @@ async def authenticate_user(username: str, password: str) -> TokenResponse:
         user=UserResponse(
             id=str(user["_id"]),
             username=user["username"],
+            email=user.get("email", ""),
             created_at=user["created_at"],
             folder_path=user["folder_path"]
         )

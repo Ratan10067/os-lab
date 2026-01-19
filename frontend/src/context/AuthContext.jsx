@@ -5,7 +5,7 @@ import {
   useEffect,
   useCallback,
 } from "react";
-import { BACKEND_URL } from "../config";
+import { API_URL } from "../config";
 
 const AuthContext = createContext(null);
 
@@ -20,14 +20,11 @@ export function AuthProvider({ children }) {
       const token = localStorage.getItem("auth_token");
       if (token) {
         try {
-          const response = await fetch(
-            `${BACKEND_URL.replace("ws", "http")}/api/auth/me`,
-            {
-              headers: {
-                Authorization: `Bearer ${token}`,
-              },
+          const response = await fetch(`${API_URL}/api/auth/me`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
             },
-          );
+          });
 
           if (response.ok) {
             const userData = await response.json();
@@ -51,16 +48,13 @@ export function AuthProvider({ children }) {
   const login = async (username, password) => {
     setError(null);
     try {
-      const response = await fetch(
-        `${BACKEND_URL.replace("ws", "http")}/api/auth/login`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ username, password }),
+      const response = await fetch(`${API_URL}/api/auth/login`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify({ username, password }),
+      });
 
       const data = await response.json();
 
@@ -77,19 +71,16 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const signup = async (username, password) => {
+  const signup = async (username, email, password) => {
     setError(null);
     try {
-      const response = await fetch(
-        `${BACKEND_URL.replace("ws", "http")}/api/auth/signup`,
-        {
-          method: "POST",
-          headers: {
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({ username, password }),
+      const response = await fetch(`${API_URL}/api/auth/signup`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
         },
-      );
+        body: JSON.stringify({ username, email, password }),
+      });
 
       const data = await response.json();
 

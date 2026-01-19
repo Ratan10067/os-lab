@@ -60,6 +60,44 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Global exception handler for MongoDB errors
+from fastapi import Request
+from fastapi.responses import JSONResponse
+from pymongo.errors import OperationFailure, ConnectionFailure, ServerSelectionTimeoutError
+
+@app.exception_handler(OperationFailure)
+async def mongodb_operation_failure_handler(request: Request, exc: OperationFailure):
+    logger.error(f"MongoDB operation failed: {exc}")
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Database operation failed. Please try again later."}
+    )
+
+@app.exception_handler(ConnectionFailure)
+async def mongodb_connection_failure_handler(request: Request, exc: ConnectionFailure):
+    logger.error(f"MongoDB connection failed: {exc}")
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Database connection unavailable. Please try again later."}
+    )
+
+@app.exception_handler(ServerSelectionTimeoutError)
+async def mongodb_timeout_handler(request: Request, exc: ServerSelectionTimeoutError):
+    logger.error(f"MongoDB timeout: {exc}")
+    return JSONResponse(
+        status_code=503,
+        content={"detail": "Database connection timeout. Please try again later."}
+    )
+
+@app.exception_handler(RuntimeError)
+async def runtime_error_handler(request: Request, exc: RuntimeError):
+    if "Database not connected" in str(exc):
+        return JSONResponse(
+            status_code=503,
+            content={"detail": "Database not connected. Please try again later."}
+        )
+    raise exc
+
 # Initialize managers
 session_manager = SessionManager()
 ws_manager = WebSocketManager(session_manager)
@@ -86,6 +124,7 @@ async def get_me(user: dict = Depends(require_auth)):
     return UserResponse(
         id=str(user["_id"]),
         username=user["username"],
+        email=user.get("email", ""),
         created_at=user["created_at"],
         folder_path=user["folder_path"]
     )
