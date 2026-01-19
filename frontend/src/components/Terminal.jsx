@@ -17,6 +17,17 @@ const Terminal = forwardRef(
     const terminalRef = useRef(null);
     const xtermRef = useRef(null);
     const fitAddonRef = useRef(null);
+    const onDataRef = useRef(onData);
+    const onResizeRef = useRef(onResize);
+
+    // Keep refs updated
+    useEffect(() => {
+      onDataRef.current = onData;
+    }, [onData]);
+
+    useEffect(() => {
+      onResizeRef.current = onResize;
+    }, [onResize]);
 
     useImperativeHandle(ref, () => ({
       write: (data) => {
@@ -42,7 +53,7 @@ const Terminal = forwardRef(
     }));
 
     useEffect(() => {
-      if (!terminalRef.current) return;
+      if (!terminalRef.current || xtermRef.current) return;
 
       // Create terminal instance
       const xterm = new XTerm({
@@ -94,31 +105,29 @@ const Terminal = forwardRef(
       // Initial fit
       setTimeout(() => {
         fitAddon.fit();
-      }, 0);
+      }, 100);
 
       // Store references
       xtermRef.current = xterm;
       fitAddonRef.current = fitAddon;
 
-      // Handle user input
+      // Handle user input - use ref to always call latest callback
       const dataDisposable = xterm.onData((data) => {
-        if (onData) {
-          onData(data);
+        if (onDataRef.current) {
+          onDataRef.current(data);
         }
       });
 
       // Handle resize
       const resizeDisposable = xterm.onResize(({ cols, rows }) => {
-        if (onResize) {
-          onResize({ cols, rows });
+        if (onResizeRef.current) {
+          onResizeRef.current({ cols, rows });
         }
       });
 
       // Handle window resize
       const handleWindowResize = () => {
-        if (fitAddon) {
-          fitAddon.fit();
-        }
+        fitAddon.fit();
       };
       window.addEventListener("resize", handleWindowResize);
 
@@ -146,8 +155,10 @@ const Terminal = forwardRef(
         resizeDisposable.dispose();
         window.removeEventListener("resize", handleWindowResize);
         xterm.dispose();
+        xtermRef.current = null;
+        fitAddonRef.current = null;
       };
-    }, [fontSize, fontFamily, onData, onResize]);
+    }, [fontSize, fontFamily]);
 
     return (
       <div

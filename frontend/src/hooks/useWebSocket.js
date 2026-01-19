@@ -13,8 +13,14 @@ export function useWebSocket(url) {
   const connect = useCallback(() => {
     if (!url) return
 
+    // Close existing connection
+    if (wsRef.current) {
+      wsRef.current.close()
+    }
+
     try {
       const ws = new WebSocket(url)
+      ws.binaryType = 'arraybuffer'  // Handle binary data properly
       wsRef.current = ws
 
       ws.onopen = () => {
@@ -24,9 +30,20 @@ export function useWebSocket(url) {
         reconnectAttempts.current = 0
       }
 
-      ws.onmessage = (event) => {
+      ws.onmessage = async (event) => {
         if (messageHandlerRef.current) {
-          messageHandlerRef.current(event.data)
+          let data = event.data
+          
+          // Convert ArrayBuffer to string
+          if (data instanceof ArrayBuffer) {
+            data = new TextDecoder().decode(data)
+          }
+          // Convert Blob to string
+          else if (data instanceof Blob) {
+            data = await data.text()
+          }
+          
+          messageHandlerRef.current(data)
         }
       }
 
@@ -40,12 +57,12 @@ export function useWebSocket(url) {
         setIsConnected(false)
         wsRef.current = null
 
-        // Attempt reconnection
-        if (reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
+        // Attempt reconnection only if not a clean close
+        if (event.code !== 1000 && reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
           reconnectAttempts.current += 1
           console.log(`Reconnecting... Attempt ${reconnectAttempts.current}`)
           setTimeout(connect, RECONNECT_DELAY)
-        } else {
+        } else if (reconnectAttempts.current >= MAX_RECONNECT_ATTEMPTS) {
           setError('Connection lost. Please refresh the page.')
         }
       }
@@ -56,8 +73,9 @@ export function useWebSocket(url) {
   }, [url])
 
   const disconnect = useCallback(() => {
+    reconnectAttempts.current = MAX_RECONNECT_ATTEMPTS // Prevent reconnection
     if (wsRef.current) {
-      wsRef.current.close()
+      wsRef.current.close(1000, 'Client disconnect')
       wsRef.current = null
     }
   }, [])
@@ -67,6 +85,7 @@ export function useWebSocket(url) {
       wsRef.current.send(message)
       return true
     }
+    console.warn('WebSocket not connected, message not sent')
     return false
   }, [])
 
@@ -77,7 +96,7 @@ export function useWebSocket(url) {
   useEffect(() => {
     connect()
     return () => disconnect()
-  }, [connect, disconnect])
+  }, []) // Only run once on mount
 
   return {
     isConnected,

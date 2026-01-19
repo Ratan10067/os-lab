@@ -1,7 +1,7 @@
 import asyncio
 import os
 import pty
-import signal
+import select
 import struct
 import fcntl
 import termios
@@ -36,10 +36,6 @@ class Sandbox:
         # Create pseudo-terminal
         self.master_fd, self.slave_fd = pty.openpty()
         
-        # Set non-blocking mode on master
-        flags = fcntl.fcntl(self.master_fd, fcntl.F_GETFL)
-        fcntl.fcntl(self.master_fd, fcntl.F_SETFL, flags | os.O_NONBLOCK)
-        
         # Prepare environment
         env = os.environ.copy()
         
@@ -69,14 +65,13 @@ class Sandbox:
             logger.info(f"Starting proot sandbox for session {self.session_id}")
         else:
             # Local development (macOS/Linux without proot)
-            home_dir = os.environ.get('HOME', '/tmp')
             env.update({
                 'TERM': 'xterm-256color',
                 'PS1': r'\[\033[32m\]user@oslab\[\033[0m\]:\[\033[34m\]\w\[\033[0m\]\$ ',
             })
             # Use zsh on macOS if available, otherwise bash
             shell = '/bin/zsh' if os.path.exists('/bin/zsh') else '/bin/bash'
-            cmd = [shell, '-i']
+            cmd = [shell]
             logger.info(f"Starting regular shell for session {self.session_id}")
         
         # Start the process
@@ -158,37 +153,28 @@ class Sandbox:
                 logger.error(f"Resize error for session {self.session_id}: {e}")
     
     async def _read_output(self):
-        """Read output from the shell"""
+        """Read output from the shell using select for proper async handling"""
         loop = asyncio.get_event_loop()
         
         while self._running and self.master_fd is not None:
             try:
-                # Use asyncio to read from fd
-                data = await loop.run_in_executor(
+                # Use select to wait for data with timeout
+                readable = await loop.run_in_executor(
                     None,
-                    self._safe_read
+                    lambda: select.select([self.master_fd], [], [], 0.1)[0]
                 )
                 
-                if data and self._output_callback:
-                    self._output_callback(data)
-                
-                # Small delay to prevent CPU spin
-                await asyncio.sleep(0.01)
+                if readable:
+                    try:
+                        data = os.read(self.master_fd, 4096)
+                        if data and self._output_callback:
+                            self._output_callback(data)
+                    except OSError:
+                        pass
                 
             except asyncio.CancelledError:
                 break
             except Exception as e:
                 if self._running:
                     logger.error(f"Read error for session {self.session_id}: {e}")
-                break
-    
-    def _safe_read(self) -> Optional[bytes]:
-        """Safely read from master fd"""
-        if self.master_fd is None:
-            return None
-        try:
-            return os.read(self.master_fd, 4096)
-        except BlockingIOError:
-            return None
-        except OSError:
-            return None
+                await asyncio.sleep(0.1)
