@@ -53,7 +53,7 @@ const Terminal = forwardRef(
     }));
 
     useEffect(() => {
-      if (!terminalRef.current || xtermRef.current) return;
+      if (!terminalRef.current) return;
 
       // Create terminal instance
       const xterm = new XTerm({
@@ -102,17 +102,18 @@ const Terminal = forwardRef(
       // Open terminal in container
       xterm.open(terminalRef.current);
 
-      // Initial fit
-      setTimeout(() => {
-        fitAddon.fit();
-      }, 100);
-
       // Store references
       xtermRef.current = xterm;
       fitAddonRef.current = fitAddon;
 
-      // Handle user input - use ref to always call latest callback
+      // Initial fit after a short delay
+      setTimeout(() => {
+        fitAddon.fit();
+      }, 100);
+
+      // Handle user input
       const dataDisposable = xterm.onData((data) => {
+        console.log("Terminal onData:", data);
         if (onDataRef.current) {
           onDataRef.current(data);
         }

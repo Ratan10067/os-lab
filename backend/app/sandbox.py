@@ -14,9 +14,6 @@ logger = logging.getLogger(__name__)
 class Sandbox:
     """
     A sandboxed shell environment for terminal sessions.
-    
-    Uses proot when available for stronger isolation,
-    falls back to a regular shell otherwise.
     """
     
     def __init__(self, session_id: str):
@@ -50,29 +47,23 @@ class Sandbox:
                 'HOME': '/home/user',
                 'USER': 'user',
                 'SHELL': '/bin/bash',
-                'PS1': r'\[\033[32m\]user@oslab\[\033[0m\]:\[\033[34m\]\w\[\033[0m\]\$ ',
+                'PS1': '\\[\\033[32m\\]user@oslab\\[\\033[0m\\]:\\[\\033[34m\\]\\w\\[\\033[0m\\]\\$ ',
                 'PATH': '/usr/local/bin:/usr/bin:/bin',
-                'LANG': 'en_US.UTF-8',
-                'LC_ALL': 'en_US.UTF-8'
             })
             cmd = [
                 '/usr/bin/proot',
                 '-r', rootfs_path,
                 '-w', '/home/user',
-                '-0',  # Fake root
+                '-0',
                 '/bin/bash', '--login'
             ]
             logger.info(f"Starting proot sandbox for session {self.session_id}")
         else:
             # Local development (macOS/Linux without proot)
-            env.update({
-                'TERM': 'xterm-256color',
-                'PS1': r'\[\033[32m\]user@oslab\[\033[0m\]:\[\033[34m\]\w\[\033[0m\]\$ ',
-            })
-            # Use zsh on macOS if available, otherwise bash
+            env['TERM'] = 'xterm-256color'
             shell = '/bin/zsh' if os.path.exists('/bin/zsh') else '/bin/bash'
             cmd = [shell]
-            logger.info(f"Starting regular shell for session {self.session_id}")
+            logger.info(f"Starting {shell} for session {self.session_id}")
         
         # Start the process
         self.process = await asyncio.create_subprocess_exec(
@@ -153,15 +144,15 @@ class Sandbox:
                 logger.error(f"Resize error for session {self.session_id}: {e}")
     
     async def _read_output(self):
-        """Read output from the shell using select for proper async handling"""
+        """Read output from the shell continuously"""
         loop = asyncio.get_event_loop()
         
         while self._running and self.master_fd is not None:
             try:
-                # Use select to wait for data with timeout
-                readable = await loop.run_in_executor(
+                # Check if data is available using select with short timeout
+                readable, _, _ = await loop.run_in_executor(
                     None,
-                    lambda: select.select([self.master_fd], [], [], 0.1)[0]
+                    lambda: select.select([self.master_fd], [], [], 0.05)
                 )
                 
                 if readable:
@@ -169,12 +160,17 @@ class Sandbox:
                         data = os.read(self.master_fd, 4096)
                         if data and self._output_callback:
                             self._output_callback(data)
-                    except OSError:
-                        pass
-                
+                    except OSError as e:
+                        if e.errno == 5:  # Input/output error - process likely exited
+                            logger.info(f"Shell exited for session {self.session_id}")
+                            break
+                        logger.error(f"Read error: {e}")
+                else:
+                    # No data, small yield to prevent busy loop
+                    await asyncio.sleep(0.01)
+                    
             except asyncio.CancelledError:
                 break
             except Exception as e:
-                if self._running:
-                    logger.error(f"Read error for session {self.session_id}: {e}")
+                logger.error(f"Read loop error for session {self.session_id}: {e}")
                 await asyncio.sleep(0.1)

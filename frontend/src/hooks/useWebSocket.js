@@ -6,24 +6,43 @@ const MAX_RECONNECT_ATTEMPTS = 5
 export function useWebSocket(url) {
   const wsRef = useRef(null)
   const reconnectAttempts = useRef(0)
+  const reconnectTimeoutRef = useRef(null)
   const [isConnected, setIsConnected] = useState(false)
   const [error, setError] = useState(null)
   const messageHandlerRef = useRef(null)
+  const mountedRef = useRef(true)
+
+  const cleanup = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
+    }
+    if (wsRef.current) {
+      wsRef.current.onopen = null
+      wsRef.current.onclose = null
+      wsRef.current.onerror = null
+      wsRef.current.onmessage = null
+      if (wsRef.current.readyState === WebSocket.OPEN || 
+          wsRef.current.readyState === WebSocket.CONNECTING) {
+        wsRef.current.close()
+      }
+      wsRef.current = null
+    }
+  }, [])
 
   const connect = useCallback(() => {
-    if (!url) return
+    if (!url || !mountedRef.current) return
 
-    // Close existing connection
-    if (wsRef.current) {
-      wsRef.current.close()
-    }
+    cleanup()
 
     try {
+      console.log('Creating WebSocket connection to:', url)
       const ws = new WebSocket(url)
-      ws.binaryType = 'arraybuffer'  // Handle binary data properly
+      ws.binaryType = 'arraybuffer'
       wsRef.current = ws
 
       ws.onopen = () => {
+        if (!mountedRef.current) return
         console.log('WebSocket connected')
         setIsConnected(true)
         setError(null)
@@ -31,38 +50,39 @@ export function useWebSocket(url) {
       }
 
       ws.onmessage = async (event) => {
+        if (!mountedRef.current) return
         if (messageHandlerRef.current) {
           let data = event.data
-          
-          // Convert ArrayBuffer to string
           if (data instanceof ArrayBuffer) {
             data = new TextDecoder().decode(data)
-          }
-          // Convert Blob to string
-          else if (data instanceof Blob) {
+          } else if (data instanceof Blob) {
             data = await data.text()
           }
-          
           messageHandlerRef.current(data)
         }
       }
 
-      ws.onerror = (event) => {
-        console.error('WebSocket error:', event)
+      ws.onerror = () => {
+        if (!mountedRef.current) return
+        console.error('WebSocket error')
         setError('Connection error')
       }
 
-      ws.onclose = (event) => {
-        console.log('WebSocket closed:', event.code, event.reason)
+      ws.onclose = () => {
+        if (!mountedRef.current) return
+        console.log('WebSocket closed')
         setIsConnected(false)
         wsRef.current = null
 
-        // Attempt reconnection only if not a clean close
-        if (event.code !== 1000 && reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
+        if (reconnectAttempts.current < MAX_RECONNECT_ATTEMPTS) {
           reconnectAttempts.current += 1
           console.log(`Reconnecting... Attempt ${reconnectAttempts.current}`)
-          setTimeout(connect, RECONNECT_DELAY)
-        } else if (reconnectAttempts.current >= MAX_RECONNECT_ATTEMPTS) {
+          reconnectTimeoutRef.current = setTimeout(() => {
+            if (mountedRef.current) {
+              connect()
+            }
+          }, RECONNECT_DELAY)
+        } else {
           setError('Connection lost. Please refresh the page.')
         }
       }
@@ -70,22 +90,15 @@ export function useWebSocket(url) {
       console.error('Failed to create WebSocket:', err)
       setError('Failed to connect')
     }
-  }, [url])
-
-  const disconnect = useCallback(() => {
-    reconnectAttempts.current = MAX_RECONNECT_ATTEMPTS // Prevent reconnection
-    if (wsRef.current) {
-      wsRef.current.close(1000, 'Client disconnect')
-      wsRef.current = null
-    }
-  }, [])
+  }, [url, cleanup])
 
   const sendMessage = useCallback((message) => {
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      wsRef.current.send(message)
+    const ws = wsRef.current
+    if (ws && ws.readyState === WebSocket.OPEN) {
+      ws.send(message)
       return true
     }
-    console.warn('WebSocket not connected, message not sent')
+    console.warn('WebSocket not ready, state:', ws?.readyState)
     return false
   }, [])
 
@@ -94,9 +107,14 @@ export function useWebSocket(url) {
   }, [])
 
   useEffect(() => {
+    mountedRef.current = true
     connect()
-    return () => disconnect()
-  }, []) // Only run once on mount
+    
+    return () => {
+      mountedRef.current = false
+      cleanup()
+    }
+  }, [connect, cleanup])
 
   return {
     isConnected,
