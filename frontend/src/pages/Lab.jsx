@@ -119,7 +119,9 @@ function Lab() {
   const { labId } = useParams();
   const navigate = useNavigate();
   const terminalRef = useRef(null);
+  const terminalContainerRef = useRef(null);
   const [sessionId] = useState(() => crypto.randomUUID());
+  const [isFullscreen, setIsFullscreen] = useState(false);
 
   const activeLab = labId || "shell-basics";
   const currentLabInfo =
@@ -167,6 +169,21 @@ function Lab() {
     reconnect();
   };
 
+  // Toggle fullscreen mode
+  const toggleFullscreen = () => {
+    if (!document.fullscreenElement) {
+      terminalContainerRef.current?.requestFullscreen?.();
+      setIsFullscreen(true);
+    } else {
+      document.exitFullscreen?.();
+      setIsFullscreen(false);
+    }
+    // Fit terminal after a short delay
+    setTimeout(() => {
+      terminalRef.current?.fit();
+    }, 100);
+  };
+
   return (
     <>
       <Navbar />
@@ -197,12 +214,8 @@ function Lab() {
 
               <button
                 className="btn btn-ghost"
-                onClick={() => {
-                  if (terminalRef.current) {
-                    terminalRef.current.fit();
-                  }
-                }}
-                title="Fit terminal"
+                onClick={toggleFullscreen}
+                title={isFullscreen ? "Exit fullscreen" : "Fullscreen"}
               >
                 <Maximize2 size={16} />
               </button>
@@ -235,8 +248,13 @@ function Lab() {
           )}
 
           <div className="lab-content">
-            <div className="lab-terminal-container">
-              <div className="lab-terminal">
+            <div className="lab-terminal-container" ref={terminalContainerRef}>
+              <div
+                className="lab-terminal"
+                style={{
+                  backgroundColor: isFullscreen ? "#0a0a0f" : undefined,
+                }}
+              >
                 <Terminal
                   ref={terminalRef}
                   onData={handleTerminalData}

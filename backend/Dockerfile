@@ -1,12 +1,12 @@
 FROM python:3.11-slim
 
 # Install comprehensive OS learning tools
-RUN apt-get update && apt-get install -y \
+RUN apt-get update && apt-get install -y --no-install-recommends \
     # Core utilities
-    proot \
     procps \
     coreutils \
-    util-linux \
+    # Version Control
+    git \
     # Compilers & Development
     gcc \
     g++ \
@@ -18,11 +18,9 @@ RUN apt-get update && apt-get install -y \
     # System monitoring
     htop \
     strace \
-    ltrace \
     # File & Disk utilities
     tree \
     file \
-    findutils \
     # Network tools
     net-tools \
     iproute2 \
@@ -32,22 +30,18 @@ RUN apt-get update && apt-get install -y \
     psmisc \
     # Shell utilities
     bash \
-    zsh \
     # Compression
     gzip \
-    bzip2 \
     zip \
     unzip \
     # Text processing
+    less \
     grep \
     sed \
-    awk \
-    less \
     # Other useful tools
     man-db \
-    time \
-    bc \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
 
 # Create app directory
 WORKDIR /app
@@ -59,30 +53,15 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create directory for user sessions
-RUN mkdir -p /app/sessions
+# Create directory for user sessions and sample files
+RUN mkdir -p /app/sessions /home/user && \
+    echo '#include <stdio.h>\nint main() { printf("Hello, OS Lab!\\n"); return 0; }' > /home/user/hello.c && \
+    echo '#include <unistd.h>\n#include <stdio.h>\nint main() { pid_t pid = fork(); if (pid == 0) printf("Child: %d\\n", getpid()); else printf("Parent: %d, Child: %d\\n", getpid(), pid); return 0; }' > /home/user/fork_demo.c && \
+    chmod 777 /home/user
 
-# Create a minimal rootfs for sandboxing with all tools
-RUN mkdir -p /app/rootfs/{bin,lib,lib64,usr,etc,home,tmp,proc,dev,sbin} && \
-    # Copy binaries
-    cp -a /bin/* /app/rootfs/bin/ 2>/dev/null || true && \
-    cp -a /usr/bin/* /app/rootfs/bin/ 2>/dev/null || true && \
-    cp -a /sbin/* /app/rootfs/sbin/ 2>/dev/null || true && \
-    cp -a /usr/sbin/* /app/rootfs/sbin/ 2>/dev/null || true && \
-    # Copy libraries
-    cp -a /lib/* /app/rootfs/lib/ 2>/dev/null || true && \
-    cp -a /lib64/* /app/rootfs/lib64/ 2>/dev/null || true && \
-    cp -a /usr/lib/* /app/rootfs/usr/lib/ 2>/dev/null || true && \
-    # Copy includes for gcc
-    cp -a /usr/include /app/rootfs/usr/ 2>/dev/null || true && \
-    # Setup users
-    echo "root:x:0:0:root:/root:/bin/bash" > /app/rootfs/etc/passwd && \
-    echo "user:x:1000:1000:user:/home/user:/bin/bash" >> /app/rootfs/etc/passwd && \
-    mkdir -p /app/rootfs/home/user && \
-    chmod 777 /app/rootfs/tmp && \
-    # Create sample C files for learning
-    echo '#include <stdio.h>\nint main() {\n    printf("Hello, OS Lab!\\n");\n    return 0;\n}' > /app/rootfs/home/user/hello.c && \
-    echo '#include <unistd.h>\n#include <stdio.h>\nint main() {\n    pid_t pid = fork();\n    if (pid == 0) printf("Child: %d\\n", getpid());\n    else printf("Parent: %d, Child: %d\\n", getpid(), pid);\n    return 0;\n}' > /app/rootfs/home/user/fork_demo.c
+# Set environment
+ENV HOME=/home/user
+ENV TERM=xterm-256color
 
 # Expose port (Hugging Face uses 7860)
 EXPOSE 7860

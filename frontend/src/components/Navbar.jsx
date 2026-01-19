@@ -26,7 +26,7 @@ function Navbar() {
           </Link>
 
           <a
-            href="https://github.com"
+            href="https://github.com/Ratan10067/os-lab"
             target="_blank"
             rel="noopener noreferrer"
             className="navbar-link"
