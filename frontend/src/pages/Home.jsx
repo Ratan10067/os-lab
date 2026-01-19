@@ -79,13 +79,15 @@ function Home() {
             </Link>
 
             {/* Actions */}
-            <div className="flex items-center gap-3">
+            <div className="flex items-center gap-2 sm:gap-3">
               <Link
                 to="/courses"
-                className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all"
+                className="flex items-center gap-1 sm:gap-2 px-2 sm:px-3 py-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-all"
               >
                 <BookOpen size={18} />
-                <span className="text-sm">Learn</span>
+                <span className="text-sm hidden xs:inline sm:inline">
+                  Learn
+                </span>
               </Link>
               <a
                 href="https://github.com/Ratan10067/os-lab"
