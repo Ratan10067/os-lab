@@ -26,6 +26,8 @@ function Signup() {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [localError, setLocalError] = useState(null);
+  const [agreedToTerms, setAgreedToTerms] = useState(false);
+  const [showTerms, setShowTerms] = useState(false);
 
   // Combine local validation errors with auth errors
   const error = localError || authError;
@@ -38,6 +40,13 @@ function Signup() {
     // Validate passwords match
     if (formData.password !== formData.confirmPassword) {
       setLocalError("Passwords do not match");
+      setIsLoading(false);
+      return;
+    }
+
+    // Validate terms accepted
+    if (!agreedToTerms) {
+      setLocalError("Please accept the terms and conditions");
       setIsLoading(false);
       return;
     }
@@ -216,6 +225,47 @@ function Signup() {
                   minLength={6}
                 />
               </div>
+            </div>
+            {/* Terms & Conditions */}
+            <div className="space-y-3 mt-4">
+              <div className="flex items-start gap-3">
+                <input
+                  type="checkbox"
+                  id="terms"
+                  checked={agreedToTerms}
+                  onChange={(e) => setAgreedToTerms(e.target.checked)}
+                  className="mt-1 w-4 h-4 rounded border-white/20 bg-[#0a0a0f] text-blue-500 focus:ring-blue-500/20 focus:ring-offset-0"
+                />
+                <label htmlFor="terms" className="text-sm text-slate-400">
+                  I agree to the{" "}
+                  <button
+                    type="button"
+                    onClick={() => setShowTerms(!showTerms)}
+                    className="text-blue-400 hover:text-blue-300 underline"
+                  >
+                    Terms & Conditions
+                  </button>
+                </label>
+              </div>
+
+              {/* Terms Content */}
+              {showTerms && (
+                <div className="p-4 bg-[#0a0a0f]/60 border border-white/10 rounded-xl text-xs text-slate-400 space-y-2">
+                  <p>By creating an account, you agree to:</p>
+                  <ul className="list-disc list-inside space-y-1 ml-2">
+                    <li>
+                      Your files are stored securely in isolated containers
+                    </li>
+                    <li>
+                      All data is automatically deleted after{" "}
+                      <strong className="text-white">30 days</strong> of
+                      inactivity
+                    </li>
+                    <li>We do not share your information with third parties</li>
+                    <li>Use this service for educational purposes only</li>
+                  </ul>
+                </div>
+              )}
             </div>
 
             {/* Submit Button */}

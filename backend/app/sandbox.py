@@ -151,13 +151,8 @@ popd() {{ echo "popd: Permission denied - restricted shell"; return 1; }}
 # Start in user's home
 builtin cd "$HOME"
 
-# Welcome message
-echo ""
-echo "  ╔═══════════════════════════════════════════╗"
-echo "  ║     Welcome to OS Lab - Web Terminal      ║"
-echo "  ║     Practice OS concepts in a sandbox     ║"
-echo "  ╚═══════════════════════════════════════════╝"
-echo ""
+# Force prompt to appear (empty command)
+:
 '''
             
             # Write the rcfile to the user's folder
@@ -168,7 +163,7 @@ echo ""
             except Exception as e:
                 logger.error(f"Failed to create rcfile: {e}")
             
-            # Use bash with our custom rcfile (--norc prevents loading default)
+            # Use bash with our custom rcfile
             cmd = ['/bin/bash', '--rcfile', rcfile_path]
             logger.info(f"Starting restricted bash for session {self.session_id}, user: {username}, folder: {work_dir}")
         

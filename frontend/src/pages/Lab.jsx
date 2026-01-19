@@ -1,5 +1,5 @@
 import { useRef, useCallback, useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
+import { useParams, useNavigate, Link } from "react-router-dom";
 import {
   RefreshCw,
   Maximize2,
@@ -172,12 +172,15 @@ function Lab() {
       {/* Top Navigation Bar */}
       <nav className="h-14 bg-[#12121a]/90 backdrop-blur-xl border-b border-white/5 flex items-center justify-between px-4 md:px-6 sticky top-0 z-50">
         {/* Logo */}
-        <div className="flex items-center gap-3">
+        <Link
+          to="/"
+          className="flex items-center gap-3 hover:opacity-80 transition-opacity"
+        >
           <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-blue-500 to-purple-600 flex items-center justify-center">
             <TerminalIcon size={16} className="text-white" />
           </div>
           <span className="font-bold text-lg hidden sm:block">OS Lab</span>
-        </div>
+        </Link>
 
         {/* Connection Status */}
         <div className="flex items-center gap-4">
@@ -281,7 +284,7 @@ function Lab() {
             {/* Terminal Container */}
             <div
               ref={terminalContainerRef}
-              className="flex-1 lg:flex-[2] bg-[#0a0a0f] relative"
+              className="flex-1 min-w-0 bg-[#0a0a0f] relative"
             >
               {/* Connection Overlay */}
               {!isConnected && (
@@ -322,7 +325,7 @@ function Lab() {
             </div>
 
             {/* Instructions Panel - Hidden on smaller screens */}
-            <aside className="hidden xl:block w-80 bg-[#0d0d14] border-l border-white/5 overflow-y-auto p-4">
+            <aside className="hidden xl:flex flex-col w-80 flex-shrink-0 bg-[#0d0d14] border-l border-white/5 overflow-y-auto p-4">
               <h3 className="text-sm font-semibold text-white mb-4">
                 {currentLabInfo.title}
               </h3>
