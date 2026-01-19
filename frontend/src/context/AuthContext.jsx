@@ -45,7 +45,7 @@ export function AuthProvider({ children }) {
     checkAuth();
   }, []);
 
-  const login = async (username, password) => {
+  const login = async (email, password) => {
     setError(null);
     try {
       const response = await fetch(`${API_URL}/api/auth/login`, {
@@ -53,7 +53,7 @@ export function AuthProvider({ children }) {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify({ username, password }),
+        body: JSON.stringify({ email, password }),
       });
 
       const data = await response.json();

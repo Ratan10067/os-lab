@@ -17,8 +17,18 @@ settings = get_settings()
 # JWT Bearer
 security = HTTPBearer(auto_error=False)
 
-# Users folder base path - use /tmp for development on macOS
-USERS_BASE_PATH = os.environ.get("USERS_BASE_PATH", "/tmp/oslab_users")
+# Users folder base path
+# In Docker/production: /home/users, in local dev (macOS): /tmp/oslab_users
+def get_users_base_path():
+    env_path = os.environ.get("USERS_BASE_PATH")
+    if env_path:
+        return env_path
+    # Check if we're in Docker (proot exists)
+    if os.path.exists('/usr/bin/proot'):
+        return '/home/users'
+    return '/tmp/oslab_users'
+
+USERS_BASE_PATH = get_users_base_path()
 
 
 def hash_password(password: str) -> str:
@@ -181,7 +191,7 @@ async def create_user(user_data: UserCreate) -> TokenResponse:
     )
 
 
-async def authenticate_user(username: str, password: str) -> TokenResponse:
+async def authenticate_user(email: str, password: str) -> TokenResponse:
     """Authenticate user and return token"""
     try:
         db = get_database()
@@ -191,29 +201,29 @@ async def authenticate_user(username: str, password: str) -> TokenResponse:
             detail="Database connection unavailable. Please try again later."
         )
     
-    user = await db.users.find_one({"username": username})
+    user = await db.users.find_one({"email": email})
     if not user:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password"
+            detail="Invalid email or password"
         )
     
     if not verify_password(password, user["password_hash"]):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid username or password"
+            detail="Invalid email or password"
         )
     
     # Update last active
     await db.users.update_one(
-        {"username": username},
+        {"email": email},
         {"$set": {"last_active": datetime.utcnow()}}
     )
     
-    # Generate token
-    access_token = create_access_token(data={"sub": username})
+    # Generate token with username for terminal display
+    access_token = create_access_token(data={"sub": user["username"]})
     
-    logger.info(f"User logged in: {username}")
+    logger.info(f"User logged in: {user['username']} ({email})")
     
     return TokenResponse(
         access_token=access_token,

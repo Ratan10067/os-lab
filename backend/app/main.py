@@ -114,7 +114,7 @@ async def signup(user_data: UserCreate):
 @app.post("/api/auth/login", response_model=TokenResponse)
 async def login(user_data: UserLogin):
     """Login and get access token"""
-    return await authenticate_user(user_data.username, user_data.password)
+    return await authenticate_user(user_data.email, user_data.password)
 
 
 @app.get("/api/auth/me", response_model=UserResponse)

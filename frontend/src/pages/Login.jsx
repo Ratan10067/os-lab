@@ -3,7 +3,7 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import {
   Terminal,
   Lock,
-  User,
+  Mail,
   ArrowRight,
   Loader,
   Github,
@@ -19,7 +19,7 @@ function Login() {
 
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
-    username: "",
+    email: "",
     password: "",
   });
   const [isLoading, setIsLoading] = useState(false);
@@ -33,7 +33,7 @@ function Login() {
     setIsLoading(true);
     setError(null);
 
-    const success = await login(formData.username, formData.password);
+    const success = await login(formData.email, formData.password);
 
     setIsLoading(false);
 
@@ -91,27 +91,26 @@ function Login() {
 
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-5">
-            {/* Username Input */}
+            {/* Email Input */}
             <div className="space-y-1.5">
               <label className="text-xs font-semibold text-slate-400 uppercase tracking-wider ml-1">
-                Username
+                Email
               </label>
               <div className="relative group/input">
-                <User
+                <Mail
                   className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within/input:text-emerald-400 transition-colors duration-300"
                   size={18}
                 />
                 <input
-                  type="text"
-                  value={formData.username}
+                  type="email"
+                  value={formData.email}
                   onChange={(e) =>
-                    setFormData({ ...formData, username: e.target.value })
+                    setFormData({ ...formData, email: e.target.value })
                   }
                   className="w-full bg-[#0a0a0f]/60 border border-white/10 rounded-xl py-3.5 pl-12 pr-4 text-white placeholder-slate-600 focus:outline-none focus:border-emerald-500/50 focus:ring-2 focus:ring-emerald-500/10 transition-all duration-300"
-                  placeholder="Enter username"
+                  placeholder="Enter your email"
                   required
-                  autoComplete="off"
-                  minLength={3}
+                  autoComplete="email"
                 />
               </div>
             </div>

@@ -38,7 +38,26 @@ class Sandbox:
         env = os.environ.copy()
         
         # Determine working directory
-        work_dir = self.user_folder if self.user_folder and os.path.exists(self.user_folder) else None
+        work_dir = None
+        if self.user_folder:
+            # Try to create the user folder if it doesn't exist
+            try:
+                os.makedirs(self.user_folder, exist_ok=True)
+                work_dir = self.user_folder
+            except (OSError, PermissionError) as e:
+                # If we can't create the folder (e.g., /home/users on macOS), 
+                # fall back to /tmp with a safe folder name
+                logger.warning(f"Cannot create {self.user_folder}: {e}, falling back to /tmp")
+                fallback_folder = f"/tmp/oslab_users/{os.path.basename(self.user_folder)}"
+                try:
+                    os.makedirs(fallback_folder, exist_ok=True)
+                    work_dir = fallback_folder
+                    self.user_folder = fallback_folder  # Update for later use
+                except Exception as e2:
+                    logger.error(f"Cannot create fallback folder: {e2}")
+        
+        if work_dir is None:
+            work_dir = "/tmp"
         
         # Build command - use proot if available and rootfs exists
         rootfs_path = '/app/rootfs'
@@ -46,32 +65,112 @@ class Sandbox:
         
         if use_proot:
             # Docker/Linux environment with proot
-            home_dir = self.user_folder or '/home/user'
+            # Extract username from folder path (e.g., /home/users/username -> username)
+            username = os.path.basename(self.user_folder) if self.user_folder else 'user'
+            home_dir = f'/home/{username}'
+            
             env.update({
                 'TERM': 'xterm-256color',
                 'HOME': home_dir,
-                'USER': 'user',
+                'USER': username,
                 'SHELL': '/bin/bash',
-                'PS1': '\\[\\033[32m\\]user@oslab\\[\\033[0m\\]:\\[\\033[34m\\]\\w\\[\\033[0m\\]\\$ ',
+                'PS1': f'\\[\\033[32m\\]{username}@oslab\\[\\033[0m\\]:\\[\\033[34m\\]\\w\\[\\033[0m\\]\\$ ',
                 'PATH': '/usr/local/bin:/usr/bin:/bin',
             })
+            
+            # Use proot to jail user in their home directory
+            # -r: set root filesystem
+            # -b: bind mount directories
+            # -w: set working directory
+            # -0: simulate root user
             cmd = [
                 '/usr/bin/proot',
                 '-r', rootfs_path,
+                '-b', '/dev',
+                '-b', '/proc',
+                '-b', f'{self.user_folder or "/tmp"}:{home_dir}',  # Mount user's real folder to /home/username
                 '-w', home_dir,
                 '-0',
-                '/bin/bash', '--login'
+                '/bin/bash', '--login', '--restricted'  # restricted bash prevents cd outside
             ]
-            logger.info(f"Starting proot sandbox for session {self.session_id}")
+            logger.info(f"Starting proot sandbox for session {self.session_id}, user: {username}")
         else:
             # Local development (macOS/Linux without proot)
+            # Create a restricted shell environment that prevents escaping user's folder
+            username = os.path.basename(self.user_folder) if self.user_folder else 'user'
+            
             env['TERM'] = 'xterm-256color'
-            if self.user_folder:
-                os.makedirs(self.user_folder, exist_ok=True)
-                env['HOME'] = self.user_folder
-            shell = '/bin/zsh' if os.path.exists('/bin/zsh') else '/bin/bash'
-            cmd = [shell]
-            logger.info(f"Starting {shell} for session {self.session_id}, folder: {self.user_folder or 'default'}")
+            env['HOME'] = work_dir
+            env['USER'] = username
+            env['OSLAB_ROOT'] = work_dir  # Our custom var to track allowed root
+            
+            # Create a custom rcfile that overrides cd to prevent escaping
+            rc_content = f'''
+# OS Lab Restricted Shell Configuration
+export PS1="\\[\\033[32m\\]{username}@oslab\\[\\033[0m\\]:\\[\\033[34m\\]\\w\\[\\033[0m\\]\\$ "
+export OSLAB_ROOT="{work_dir}"
+
+# Override cd to prevent escaping user's folder
+cd() {{
+    local target="$1"
+    
+    # If no argument, go to home
+    if [ -z "$target" ]; then
+        builtin cd "$HOME"
+        return 0
+    fi
+    
+    # Get the absolute path of target
+    local abs_path
+    if [[ "$target" = /* ]]; then
+        abs_path="$target"
+    else
+        abs_path="$(builtin cd "$target" 2>/dev/null && pwd)"
+        if [ -z "$abs_path" ]; then
+            echo "cd: $target: No such file or directory"
+            return 1
+        fi
+    fi
+    
+    # Check if path is within allowed root
+    case "$abs_path" in
+        "$OSLAB_ROOT"*)
+            builtin cd "$target"
+            ;;
+        *)
+            echo "cd: Permission denied - cannot navigate outside your home folder"
+            return 1
+            ;;
+    esac
+}}
+
+# Also restrict pushd and popd
+pushd() {{ echo "pushd: Permission denied - restricted shell"; return 1; }}
+popd() {{ echo "popd: Permission denied - restricted shell"; return 1; }}
+
+# Start in user's home
+builtin cd "$HOME"
+
+# Welcome message
+echo ""
+echo "  ╔═══════════════════════════════════════════╗"
+echo "  ║     Welcome to OS Lab - Web Terminal      ║"
+echo "  ║     Practice OS concepts in a sandbox     ║"
+echo "  ╚═══════════════════════════════════════════╝"
+echo ""
+'''
+            
+            # Write the rcfile to the user's folder
+            rcfile_path = os.path.join(work_dir, '.oslab_bashrc')
+            try:
+                with open(rcfile_path, 'w') as f:
+                    f.write(rc_content)
+            except Exception as e:
+                logger.error(f"Failed to create rcfile: {e}")
+            
+            # Use bash with our custom rcfile (--norc prevents loading default)
+            cmd = ['/bin/bash', '--rcfile', rcfile_path]
+            logger.info(f"Starting restricted bash for session {self.session_id}, user: {username}, folder: {work_dir}")
         
         # Start the process
         self.process = await asyncio.create_subprocess_exec(

@@ -53,11 +53,28 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy application code
 COPY . .
 
-# Create directory for user sessions and sample files
-RUN mkdir -p /app/sessions /home/user && \
-    echo '#include <stdio.h>\nint main() { printf("Hello, OS Lab!\\n"); return 0; }' > /home/user/hello.c && \
-    echo '#include <unistd.h>\n#include <stdio.h>\nint main() { pid_t pid = fork(); if (pid == 0) printf("Child: %d\\n", getpid()); else printf("Parent: %d, Child: %d\\n", getpid(), pid); return 0; }' > /home/user/fork_demo.c && \
-    chmod 777 /home/user
+# Install proot for sandboxing (allows chroot without root privileges)
+RUN apt-get update && apt-get install -y --no-install-recommends proot \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create rootfs for proot sandboxing (minimal filesystem)
+RUN mkdir -p /app/rootfs && \
+    # Copy essential directories to rootfs
+    cp -a /bin /app/rootfs/ && \
+    cp -a /lib /app/rootfs/ && \
+    cp -a /lib64 /app/rootfs/ 2>/dev/null || true && \
+    cp -a /usr /app/rootfs/ && \
+    mkdir -p /app/rootfs/etc /app/rootfs/dev /app/rootfs/proc /app/rootfs/tmp /app/rootfs/home && \
+    chmod 1777 /app/rootfs/tmp && \
+    # Copy necessary config files
+    cp /etc/passwd /app/rootfs/etc/ 2>/dev/null || true && \
+    cp /etc/group /app/rootfs/etc/ 2>/dev/null || true && \
+    echo "root:x:0:0:root:/root:/bin/bash" > /app/rootfs/etc/passwd && \
+    echo "user:x:1000:1000:user:/home/user:/bin/bash" >> /app/rootfs/etc/passwd
+
+# Create directory for user sessions
+RUN mkdir -p /app/sessions /home/users && \
+    chmod 777 /home/users
 
 # Set environment
 ENV HOME=/home/user
