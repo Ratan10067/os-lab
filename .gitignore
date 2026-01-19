@@ -55,3 +55,6 @@ htmlcov/
 *.bak
 *.tmp
 .cache/
+
+deploy_to_hf.sh
+backend/deploy_to_hf.sh
