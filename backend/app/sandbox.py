@@ -112,36 +112,46 @@ export OSLAB_ROOT="{work_dir}"
 
 # Override cd to prevent escaping user's folder
 cd() {{
-    local target="$1"
+    local target="${{1:-$HOME}}"
+    local abs_path
     
-    # If no argument, go to home
-    if [ -z "$target" ]; then
-        builtin cd "$HOME"
-        return 0
+    # Handle special cases
+    if [ "$target" = "-" ]; then
+        builtin cd - 2>/dev/null || echo "cd: OLDPWD not set"
+        return
     fi
     
-    # Get the absolute path of target
-    local abs_path
+    # Resolve absolute path
     if [[ "$target" = /* ]]; then
+        # Already absolute
         abs_path="$target"
+    elif [[ "$target" = "~"* ]]; then
+        # Home-relative
+        abs_path="${{HOME}}${{target:1}}"
     else
-        abs_path="$(builtin cd "$target" 2>/dev/null && pwd)"
-        if [ -z "$abs_path" ]; then
+        # Relative path - resolve from current directory
+        abs_path="$(pwd)/$target"
+    fi
+    
+    # Normalize path (resolve . and ..)
+    abs_path=$(cd "${{abs_path%/*}}" 2>/dev/null && pwd)"/${{abs_path##*/}}" 2>/dev/null || abs_path="$target"
+    
+    # Remove trailing slash for comparison
+    abs_path="${{abs_path%/}}"
+    local root="${{OSLAB_ROOT%/}}"
+    
+    # Check if path is within allowed root or is the root itself
+    if [[ "$abs_path" == "$root" ]] || [[ "$abs_path" == "$root/"* ]]; then
+        if [ -d "$target" ]; then
+            builtin cd "$target"
+        else
             echo "cd: $target: No such file or directory"
             return 1
         fi
+    else
+        echo "cd: Permission denied - cannot navigate outside your home folder"
+        return 1
     fi
-    
-    # Check if path is within allowed root
-    case "$abs_path" in
-        "$OSLAB_ROOT"*)
-            builtin cd "$target"
-            ;;
-        *)
-            echo "cd: Permission denied - cannot navigate outside your home folder"
-            return 1
-            ;;
-    esac
 }}
 
 # Also restrict pushd and popd
