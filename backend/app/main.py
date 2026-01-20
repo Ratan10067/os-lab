@@ -61,6 +61,10 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# Include admin router
+from .admin import router as admin_router
+app.include_router(admin_router)
+
 # Global exception handler for MongoDB errors
 from fastapi import Request
 from fastapi.responses import JSONResponse

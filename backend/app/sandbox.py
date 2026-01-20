@@ -82,14 +82,20 @@ class Sandbox:
             # Create a custom rcfile that restricts cd to user's home folder
             rc_content = f'''
 # OS Lab Restricted Shell Configuration (proot)
-export PS1="\\[\\033[32m\\]{username}@oslab\\[\\033[0m\\]:\\[\\033[34m\\]\\w\\[\\033[0m\\]\\$ "
+set +o histexpand  # Disable history expansion to prevent issues with ! characters
+export PS1="{username}@oslab:\\w\\$ "
 export OSLAB_ROOT="{home_dir}"
+export HISTFILE=""
+
+# Trap to prevent accidental exit
+trap '' SIGTSTP
 
 # Override cd to prevent escaping user's folder
 cd() {{
     local target="${{1:-$HOME}}"
     local abs_path
-    local current_dir="$(pwd)"
+    local current_dir
+    current_dir="$(pwd)"
     
     # Handle special cases
     if [ "$target" = "-" ]; then
@@ -124,7 +130,7 @@ cd() {{
     # Check if path is within allowed root or is the root itself
     if [[ "$abs_path" == "$root" ]] || [[ "$abs_path" == "$root/"* ]]; then
         if [ -d "$abs_path" ]; then
-            builtin cd "$abs_path"
+            builtin cd "$abs_path" || return 1
         else
             echo "cd: $target: No such file or directory"
             return 1
@@ -140,7 +146,7 @@ pushd() {{ echo "pushd: Permission denied - restricted shell"; return 1; }}
 popd() {{ echo "popd: Permission denied - restricted shell"; return 1; }}
 
 # Start in user's home
-builtin cd "$HOME"
+builtin cd "$HOME" 2>/dev/null || true
 '''
             
             # Write the rcfile to the user's real folder (which is mounted to home_dir)
@@ -164,8 +170,11 @@ builtin cd "$HOME"
                 '-b', f'{self.user_folder or "/tmp"}:{home_dir}',  # Mount user's real folder to /home/username
                 '-w', home_dir,
                 '-0',
-                '/bin/bash', '--rcfile', f'{home_dir}/.oslab_bashrc'  # Use custom rcfile instead of --restricted
+                '/bin/bash', '-i', '--rcfile', f'{home_dir}/.oslab_bashrc'  # Interactive mode with custom rcfile
             ]
+            
+            # Add HISTFILE to prevent history file issues
+            env['HISTFILE'] = ''
             logger.info(f"Starting proot sandbox for session {self.session_id}, user: {username}")
         else:
             # Local development (macOS/Linux without proot)
@@ -180,14 +189,20 @@ builtin cd "$HOME"
             # Create a custom rcfile that overrides cd to prevent escaping
             rc_content = f'''
 # OS Lab Restricted Shell Configuration
-export PS1="\\[\\033[32m\\]{username}@oslab\\[\\033[0m\\]:\\[\\033[34m\\]\\w\\[\\033[0m\\]\\$ "
+set +o histexpand  # Disable history expansion to prevent issues with ! characters
+export PS1="{username}@oslab:\\w\\$ "
 export OSLAB_ROOT="{work_dir}"
+export HISTFILE=""
+
+# Trap to prevent accidental exit
+trap '' SIGTSTP
 
 # Override cd to prevent escaping user's folder
 cd() {{
     local target="${{1:-$HOME}}"
     local abs_path
-    local current_dir="$(pwd)"
+    local current_dir
+    current_dir="$(pwd)"
     
     # Handle special cases
     if [ "$target" = "-" ]; then
@@ -195,15 +210,6 @@ cd() {{
             target="$OLDPWD"
         else
             echo "cd: OLDPWD not set"
-            return 1
-        fi
-    fi
-    
-    # Check if directory exists first
-    if [ "$target" != "-" ] && [ ! -d "$target" ] && [[ "$target" != "~"* ]] && [[ "$target" != /* ]]; then
-        # Check relative path
-        if [ ! -d "$current_dir/$target" ]; then
-            echo "cd: $target: No such file or directory"
             return 1
         fi
     fi
@@ -234,7 +240,7 @@ cd() {{
     # Check if path is within allowed root or is the root itself
     if [[ "$abs_path" == "$root" ]] || [[ "$abs_path" == "$root/"* ]]; then
         if [ -d "$abs_path" ]; then
-            builtin cd "$abs_path"
+            builtin cd "$abs_path" || return 1
         else
             echo "cd: $target: No such file or directory"
             return 1
@@ -250,10 +256,7 @@ pushd() {{ echo "pushd: Permission denied - restricted shell"; return 1; }}
 popd() {{ echo "popd: Permission denied - restricted shell"; return 1; }}
 
 # Start in user's home
-builtin cd "$HOME"
-
-# Force prompt to appear (empty command)
-:
+builtin cd "$HOME" 2>/dev/null || true
 '''
             
             # Write the rcfile to the user's folder

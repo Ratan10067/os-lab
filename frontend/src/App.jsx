@@ -6,6 +6,7 @@ import Signup from "./pages/Signup";
 import Courses from "./pages/Courses";
 import CourseDetail from "./pages/CourseDetail";
 import Lesson from "./pages/Lesson";
+import Admin from "./pages/Admin";
 import ProtectedRoute from "./components/ProtectedRoute";
 import LoadingScreen from "./components/LoadingScreen";
 import { useAuth } from "./context/AuthContext";
@@ -42,6 +43,7 @@ function App() {
       <Route path="/courses/:courseId/:lessonId" element={<Lesson />} />
       <Route path="/login" element={<Login />} />
       <Route path="/signup" element={<Signup />} />
+      <Route path="/admin/portal" element={<Admin />} />
     </Routes>
   );
 }

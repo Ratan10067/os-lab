@@ -16,6 +16,9 @@ class Settings(BaseSettings):
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 60 * 24 * 7  # 7 days
     
+    # Admin Portal
+    admin_secret: str = Field(default="change-this-admin-secret-in-production")
+    
     # Sessions
     max_sessions: int = 50
     session_timeout: int = 1800  # 30 minutes
