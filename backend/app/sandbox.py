@@ -76,11 +76,84 @@ class Sandbox:
                 'SHELL': '/bin/bash',
                 'PS1': f'\\[\\033[32m\\]{username}@oslab\\[\\033[0m\\]:\\[\\033[34m\\]\\w\\[\\033[0m\\]\\$ ',
                 'PATH': '/usr/local/bin:/usr/bin:/bin',
+                'OSLAB_ROOT': home_dir,  # Track allowed root
             })
+            
+            # Create a custom rcfile that restricts cd to user's home folder
+            rc_content = f'''
+# OS Lab Restricted Shell Configuration (proot)
+export PS1="\\[\\033[32m\\]{username}@oslab\\[\\033[0m\\]:\\[\\033[34m\\]\\w\\[\\033[0m\\]\\$ "
+export OSLAB_ROOT="{home_dir}"
+
+# Override cd to prevent escaping user's folder
+cd() {{
+    local target="${{1:-$HOME}}"
+    local abs_path
+    local current_dir="$(pwd)"
+    
+    # Handle special cases
+    if [ "$target" = "-" ]; then
+        if [ -n "$OLDPWD" ]; then
+            target="$OLDPWD"
+        else
+            echo "cd: OLDPWD not set"
+            return 1
+        fi
+    fi
+    
+    # Resolve to absolute path
+    if [[ "$target" = /* ]]; then
+        abs_path="$target"
+    elif [[ "$target" = "~" ]]; then
+        abs_path="$HOME"
+    elif [[ "$target" = "~/"* ]]; then
+        abs_path="${{HOME}}/${{target:2}}"
+    else
+        abs_path="$current_dir/$target"
+    fi
+    
+    # Normalize path - use realpath if available
+    if command -v realpath &>/dev/null; then
+        abs_path=$(realpath -m "$abs_path" 2>/dev/null) || abs_path="$abs_path"
+    fi
+    
+    # Remove trailing slash for comparison
+    abs_path="${{abs_path%/}}"
+    local root="${{OSLAB_ROOT%/}}"
+    
+    # Check if path is within allowed root or is the root itself
+    if [[ "$abs_path" == "$root" ]] || [[ "$abs_path" == "$root/"* ]]; then
+        if [ -d "$abs_path" ]; then
+            builtin cd "$abs_path"
+        else
+            echo "cd: $target: No such file or directory"
+            return 1
+        fi
+    else
+        echo "cd: Permission denied - cannot navigate outside your home folder"
+        return 1
+    fi
+}}
+
+# Restrict pushd and popd
+pushd() {{ echo "pushd: Permission denied - restricted shell"; return 1; }}
+popd() {{ echo "popd: Permission denied - restricted shell"; return 1; }}
+
+# Start in user's home
+builtin cd "$HOME"
+'''
+            
+            # Write the rcfile to the user's real folder (which is mounted to home_dir)
+            rcfile_path = os.path.join(self.user_folder or '/tmp', '.oslab_bashrc')
+            try:
+                with open(rcfile_path, 'w') as f:
+                    f.write(rc_content)
+            except Exception as e:
+                logger.error(f"Failed to create proot rcfile: {e}")
             
             # Use proot to jail user in their home directory
             # -r: set root filesystem
-            # -b: bind mount directories
+            # -b: bind mount directories  
             # -w: set working directory
             # -0: simulate root user
             cmd = [
@@ -91,7 +164,7 @@ class Sandbox:
                 '-b', f'{self.user_folder or "/tmp"}:{home_dir}',  # Mount user's real folder to /home/username
                 '-w', home_dir,
                 '-0',
-                '/bin/bash', '--login', '--restricted'  # restricted bash prevents cd outside
+                '/bin/bash', '--rcfile', f'{home_dir}/.oslab_bashrc'  # Use custom rcfile instead of --restricted
             ]
             logger.info(f"Starting proot sandbox for session {self.session_id}, user: {username}")
         else:
@@ -114,27 +187,45 @@ export OSLAB_ROOT="{work_dir}"
 cd() {{
     local target="${{1:-$HOME}}"
     local abs_path
+    local current_dir="$(pwd)"
     
     # Handle special cases
     if [ "$target" = "-" ]; then
-        builtin cd - 2>/dev/null || echo "cd: OLDPWD not set"
-        return
+        if [ -n "$OLDPWD" ]; then
+            target="$OLDPWD"
+        else
+            echo "cd: OLDPWD not set"
+            return 1
+        fi
     fi
     
-    # Resolve absolute path
+    # Check if directory exists first
+    if [ "$target" != "-" ] && [ ! -d "$target" ] && [[ "$target" != "~"* ]] && [[ "$target" != /* ]]; then
+        # Check relative path
+        if [ ! -d "$current_dir/$target" ]; then
+            echo "cd: $target: No such file or directory"
+            return 1
+        fi
+    fi
+    
+    # Resolve to absolute path
     if [[ "$target" = /* ]]; then
-        # Already absolute
         abs_path="$target"
-    elif [[ "$target" = "~"* ]]; then
-        # Home-relative
-        abs_path="${{HOME}}${{target:1}}"
+    elif [[ "$target" = "~" ]]; then
+        abs_path="$HOME"
+    elif [[ "$target" = "~/"* ]]; then
+        abs_path="${{HOME}}/${{target:2}}"
     else
-        # Relative path - resolve from current directory
-        abs_path="$(pwd)/$target"
+        abs_path="$current_dir/$target"
     fi
     
-    # Normalize path (resolve . and ..)
-    abs_path=$(cd "${{abs_path%/*}}" 2>/dev/null && pwd)"/${{abs_path##*/}}" 2>/dev/null || abs_path="$target"
+    # Normalize path - use realpath if available, otherwise use Python
+    if command -v realpath &>/dev/null; then
+        abs_path=$(realpath -m "$abs_path" 2>/dev/null) || abs_path="$abs_path"
+    else
+        # Fallback: Use Python to normalize the path
+        abs_path=$(python3 -c "import os; print(os.path.normpath('$abs_path'))" 2>/dev/null) || abs_path="$abs_path"
+    fi
     
     # Remove trailing slash for comparison
     abs_path="${{abs_path%/}}"
@@ -142,8 +233,8 @@ cd() {{
     
     # Check if path is within allowed root or is the root itself
     if [[ "$abs_path" == "$root" ]] || [[ "$abs_path" == "$root/"* ]]; then
-        if [ -d "$target" ]; then
-            builtin cd "$target"
+        if [ -d "$abs_path" ]; then
+            builtin cd "$abs_path"
         else
             echo "cd: $target: No such file or directory"
             return 1
