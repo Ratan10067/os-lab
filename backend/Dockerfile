@@ -70,19 +70,17 @@ RUN mkdir -p /app/rootfs && \
     cp /etc/passwd /app/rootfs/etc/ 2>/dev/null || true && \
     cp /etc/group /app/rootfs/etc/ 2>/dev/null || true && \
     echo "root:x:0:0:root:/root:/bin/bash" > /app/rootfs/etc/passwd && \
-    echo "user:x:1000:1000:user:/home/user:/bin/bash" >> /app/rootfs/etc/passwd && \
-    # Create profile.d directory for startup scripts
-    mkdir -p /app/rootfs/etc/profile.d
+    echo "user:x:1000:1000:user:/home/user:/bin/bash" >> /app/rootfs/etc/passwd
 
-# Add restricted cd function to prevent navigating outside home directory
-RUN echo '# OS Lab Restricted Shell - prevents navigating outside home directory\n\
+# Create /etc/profile with restricted cd function to prevent escaping home directory
+RUN echo '# /etc/profile: system-wide .profile file for the Bourne shell\n\
+    \n\
+    # OS Lab Restricted Shell - prevents navigating outside home directory\n\
     if [ -n "$OSLAB_ROOT" ]; then\n\
     cd() {\n\
     local target="${1:-$HOME}"\n\
     local abs_path\n\
-    local current_dir\n\
-    current_dir="$(pwd)"\n\
-    \n\
+    local current_dir="$(pwd)"\n\
     if [ "$target" = "-" ]; then\n\
     if [ -n "$OLDPWD" ]; then\n\
     target="$OLDPWD"\n\
@@ -91,7 +89,6 @@ RUN echo '# OS Lab Restricted Shell - prevents navigating outside home directory
     return 1\n\
     fi\n\
     fi\n\
-    \n\
     if [[ "$target" = /* ]]; then\n\
     abs_path="$target"\n\
     elif [[ "$target" = "~" ]]; then\n\
@@ -101,14 +98,11 @@ RUN echo '# OS Lab Restricted Shell - prevents navigating outside home directory
     else\n\
     abs_path="$current_dir/$target"\n\
     fi\n\
-    \n\
-    if command -v realpath &>/dev/null; then\n\
+    if command -v realpath >/dev/null 2>&1; then\n\
     abs_path=$(realpath -m "$abs_path" 2>/dev/null) || abs_path="$abs_path"\n\
     fi\n\
-    \n\
     abs_path="${abs_path%/}"\n\
     local root="${OSLAB_ROOT%/}"\n\
-    \n\
     if [[ "$abs_path" == "$root" ]] || [[ "$abs_path" == "$root/"* ]]; then\n\
     if [ -d "$abs_path" ]; then\n\
     builtin cd "$abs_path" || return 1\n\
@@ -123,8 +117,10 @@ RUN echo '# OS Lab Restricted Shell - prevents navigating outside home directory
     }\n\
     pushd() { echo "pushd: Permission denied - restricted shell"; return 1; }\n\
     popd() { echo "popd: Permission denied - restricted shell"; return 1; }\n\
-    fi\n' > /app/rootfs/etc/profile.d/oslab_restrict.sh && \
-    chmod +x /app/rootfs/etc/profile.d/oslab_restrict.sh
+    fi\n' > /app/rootfs/etc/profile
+
+# Also create bash.bashrc with same restrictions for interactive non-login shells
+RUN cp /app/rootfs/etc/profile /app/rootfs/etc/bash.bashrc
 
 # Create directory for user sessions
 RUN mkdir -p /app/sessions /home/users && \
