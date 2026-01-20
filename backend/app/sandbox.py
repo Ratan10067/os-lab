@@ -172,7 +172,7 @@ builtin cd "$HOME" 2>/dev/null || true
             # -b: bind mount directories  
             # -w: set working directory
             # -0: simulate root user
-            # Note: Using just -i for interactive bash, PS1 is set via environment
+            # Using -l for login shell so /etc/profile.d/ scripts get sourced (cd restriction)
             cmd = [
                 '/usr/bin/proot',
                 '-r', rootfs_path,
@@ -181,7 +181,7 @@ builtin cd "$HOME" 2>/dev/null || true
                 '-b', f'{user_folder_path}:{home_dir}',  # Mount user's real folder to /home/username
                 '-w', home_dir,
                 '-0',
-                '/bin/bash', '-i'  # Interactive bash - relies on PS1 from env
+                '/bin/bash', '-l'  # Login shell - sources /etc/profile.d/ for cd restriction
             ]
             
             # Add HISTFILE to prevent history file issues

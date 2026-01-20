@@ -70,7 +70,61 @@ RUN mkdir -p /app/rootfs && \
     cp /etc/passwd /app/rootfs/etc/ 2>/dev/null || true && \
     cp /etc/group /app/rootfs/etc/ 2>/dev/null || true && \
     echo "root:x:0:0:root:/root:/bin/bash" > /app/rootfs/etc/passwd && \
-    echo "user:x:1000:1000:user:/home/user:/bin/bash" >> /app/rootfs/etc/passwd
+    echo "user:x:1000:1000:user:/home/user:/bin/bash" >> /app/rootfs/etc/passwd && \
+    # Create profile.d directory for startup scripts
+    mkdir -p /app/rootfs/etc/profile.d
+
+# Add restricted cd function to prevent navigating outside home directory
+RUN echo '# OS Lab Restricted Shell - prevents navigating outside home directory\n\
+    if [ -n "$OSLAB_ROOT" ]; then\n\
+    cd() {\n\
+    local target="${1:-$HOME}"\n\
+    local abs_path\n\
+    local current_dir\n\
+    current_dir="$(pwd)"\n\
+    \n\
+    if [ "$target" = "-" ]; then\n\
+    if [ -n "$OLDPWD" ]; then\n\
+    target="$OLDPWD"\n\
+    else\n\
+    echo "cd: OLDPWD not set"\n\
+    return 1\n\
+    fi\n\
+    fi\n\
+    \n\
+    if [[ "$target" = /* ]]; then\n\
+    abs_path="$target"\n\
+    elif [[ "$target" = "~" ]]; then\n\
+    abs_path="$HOME"\n\
+    elif [[ "$target" = "~/"* ]]; then\n\
+    abs_path="${HOME}/${target:2}"\n\
+    else\n\
+    abs_path="$current_dir/$target"\n\
+    fi\n\
+    \n\
+    if command -v realpath &>/dev/null; then\n\
+    abs_path=$(realpath -m "$abs_path" 2>/dev/null) || abs_path="$abs_path"\n\
+    fi\n\
+    \n\
+    abs_path="${abs_path%/}"\n\
+    local root="${OSLAB_ROOT%/}"\n\
+    \n\
+    if [[ "$abs_path" == "$root" ]] || [[ "$abs_path" == "$root/"* ]]; then\n\
+    if [ -d "$abs_path" ]; then\n\
+    builtin cd "$abs_path" || return 1\n\
+    else\n\
+    echo "cd: $target: No such file or directory"\n\
+    return 1\n\
+    fi\n\
+    else\n\
+    echo "cd: Permission denied - cannot navigate outside your home folder"\n\
+    return 1\n\
+    fi\n\
+    }\n\
+    pushd() { echo "pushd: Permission denied - restricted shell"; return 1; }\n\
+    popd() { echo "popd: Permission denied - restricted shell"; return 1; }\n\
+    fi\n' > /app/rootfs/etc/profile.d/oslab_restrict.sh && \
+    chmod +x /app/rootfs/etc/profile.d/oslab_restrict.sh
 
 # Create directory for user sessions
 RUN mkdir -p /app/sessions /home/users && \
