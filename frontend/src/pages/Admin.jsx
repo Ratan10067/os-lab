@@ -23,6 +23,8 @@ import {
   File,
   FolderOpen,
   ArrowUp,
+  X,
+  FileText,
 } from "lucide-react";
 import { API_URL } from "../config";
 
@@ -51,6 +53,7 @@ function Admin() {
   const [fileBrowserPath, setFileBrowserPath] = useState("");
   const [fileBrowserData, setFileBrowserData] = useState(null);
   const [largeFiles, setLargeFiles] = useState(null);
+  const [fileViewer, setFileViewer] = useState(null); // { username, path, content, ... }
   const [expandedUser, setExpandedUser] = useState(null);
 
   // Store passkey in session storage
@@ -238,6 +241,21 @@ function Admin() {
     }
   };
 
+  const viewFile = async (username, path) => {
+    setIsLoading(true);
+    try {
+      const encodedPath = encodeURIComponent(path);
+      const data = await apiCall(
+        `/user/${username}/files/view?path=${encodedPath}`,
+      );
+      setFileViewer({ username, ...data });
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const handleLogout = () => {
     sessionStorage.removeItem("admin_passkey");
     setIsAuthenticated(false);
@@ -260,6 +278,9 @@ function Admin() {
         break;
       case "folders":
         loadFolders();
+        break;
+      case "files":
+        loadFolders(); // Load folders list for file manager
         break;
       case "system":
         loadSystemInfo();
@@ -844,6 +865,304 @@ function Admin() {
               )}
             </div>
           )}
+
+          {/* Files Tab - File Manager */}
+          {activeTab === "files" && (
+            <div>
+              <div className="flex items-center justify-between mb-6">
+                <h2 className="text-xl font-bold">File Manager</h2>
+                <button
+                  onClick={() => loadLargeFiles(1)}
+                  className="px-4 py-2 bg-orange-500/10 border border-orange-500/20 text-orange-400 rounded-lg text-sm hover:bg-orange-500/20 transition-colors"
+                >
+                  Find Large Files (&gt;1MB)
+                </button>
+              </div>
+
+              {/* User Folder Selector */}
+              {!fileBrowserUser && (
+                <div>
+                  <p className="text-slate-400 mb-4">
+                    Select a user folder to browse:
+                  </p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                    {folders.map((folder) => (
+                      <button
+                        key={folder.username}
+                        onClick={() => browseUserFiles(folder.username)}
+                        className="p-4 bg-[#12121a] rounded-xl border border-white/10 hover:border-blue-500/30 hover:bg-blue-500/5 transition-all text-left"
+                      >
+                        <div className="flex items-center gap-3 mb-2">
+                          <Folder size={20} className="text-blue-400" />
+                          <span className="font-medium truncate">
+                            {folder.username}
+                          </span>
+                        </div>
+                        <p className="text-sm text-slate-400">
+                          {folder.size_human}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {folder.file_count} files
+                        </p>
+                      </button>
+                    ))}
+                  </div>
+                  {folders.length === 0 && (
+                    <div className="text-center py-12 text-slate-400">
+                      No user folders found. Users need to sign up first.
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* File Browser */}
+              {fileBrowserUser && fileBrowserData && (
+                <div>
+                  {/* Navigation Header */}
+                  <div className="flex items-center gap-4 mb-4 p-3 bg-[#12121a] rounded-lg border border-white/10">
+                    <button
+                      onClick={() => {
+                        setFileBrowserUser(null);
+                        setFileBrowserData(null);
+                        setFileBrowserPath("");
+                      }}
+                      className="p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                      title="Back to user list"
+                    >
+                      <ChevronLeft size={18} />
+                    </button>
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-blue-400 font-medium">
+                        {fileBrowserUser}
+                      </span>
+                      <span className="text-slate-500">/</span>
+                      {fileBrowserPath ? (
+                        <>
+                          <button
+                            onClick={() => browseUserFiles(fileBrowserUser, "")}
+                            className="text-slate-400 hover:text-white"
+                          >
+                            home
+                          </button>
+                          {fileBrowserPath.split("/").map((segment, i, arr) => (
+                            <span key={i} className="flex items-center gap-2">
+                              <span className="text-slate-500">/</span>
+                              <button
+                                onClick={() =>
+                                  browseUserFiles(
+                                    fileBrowserUser,
+                                    arr.slice(0, i + 1).join("/"),
+                                  )
+                                }
+                                className={
+                                  i === arr.length - 1
+                                    ? "text-white font-medium"
+                                    : "text-slate-400 hover:text-white"
+                                }
+                              >
+                                {segment}
+                              </button>
+                            </span>
+                          ))}
+                        </>
+                      ) : (
+                        <span className="text-white font-medium">home</span>
+                      )}
+                    </div>
+                    {fileBrowserPath && (
+                      <button
+                        onClick={() =>
+                          browseUserFiles(
+                            fileBrowserUser,
+                            fileBrowserData.parent_path || "",
+                          )
+                        }
+                        className="ml-auto p-2 rounded-lg bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white transition-colors"
+                        title="Go up"
+                      >
+                        <ArrowUp size={16} />
+                      </button>
+                    )}
+                  </div>
+
+                  {/* File Stats */}
+                  <div className="flex items-center gap-4 mb-4 text-sm text-slate-400">
+                    <span>{fileBrowserData.total_items} items</span>
+                    <span>•</span>
+                    <span>{fileBrowserData.total_size}</span>
+                  </div>
+
+                  {/* File List */}
+                  {isLoading ? (
+                    <div className="flex items-center justify-center py-12">
+                      <Loader
+                        size={24}
+                        className="animate-spin text-blue-400"
+                      />
+                    </div>
+                  ) : (
+                    <div className="bg-[#12121a] rounded-xl border border-white/10 overflow-hidden">
+                      {fileBrowserData.items.length === 0 ? (
+                        <div className="text-center py-12 text-slate-400">
+                          Empty folder
+                        </div>
+                      ) : (
+                        <table className="w-full">
+                          <thead className="bg-white/5">
+                            <tr>
+                              <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">
+                                Name
+                              </th>
+                              <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">
+                                Size
+                              </th>
+                              <th className="text-left px-4 py-3 text-sm font-medium text-slate-400 hidden md:table-cell">
+                                Modified
+                              </th>
+                              <th className="text-right px-4 py-3 text-sm font-medium text-slate-400">
+                                Actions
+                              </th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-white/5">
+                            {fileBrowserData.items.map((item) => (
+                              <tr key={item.path} className="hover:bg-white/5">
+                                <td className="px-4 py-3">
+                                  {item.type === "directory" ? (
+                                    <button
+                                      onClick={() =>
+                                        browseUserFiles(
+                                          fileBrowserUser,
+                                          item.path,
+                                        )
+                                      }
+                                      className="flex items-center gap-2 text-blue-400 hover:text-blue-300"
+                                    >
+                                      <Folder size={16} />
+                                      <span>{item.name}</span>
+                                    </button>
+                                  ) : (
+                                    <div className="flex items-center gap-2 text-slate-300">
+                                      <File
+                                        size={16}
+                                        className="text-slate-500"
+                                      />
+                                      <span>{item.name}</span>
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="px-4 py-3 text-slate-400 text-sm">
+                                  {item.size_human}
+                                </td>
+                                <td className="px-4 py-3 text-slate-500 text-xs hidden md:table-cell">
+                                  {item.modified
+                                    ? new Date(item.modified).toLocaleString()
+                                    : "-"}
+                                </td>
+                                <td className="px-4 py-3 text-right">
+                                  <div className="flex items-center justify-end gap-1">
+                                    {item.type === "file" && (
+                                      <button
+                                        onClick={() =>
+                                          viewFile(fileBrowserUser, item.path)
+                                        }
+                                        className="p-1.5 rounded-lg bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors"
+                                        title="View file"
+                                      >
+                                        <Eye size={14} />
+                                      </button>
+                                    )}
+                                    <button
+                                      onClick={() =>
+                                        deleteFile(fileBrowserUser, item.path)
+                                      }
+                                      className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                                      title="Delete"
+                                    >
+                                      <Trash2 size={14} />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      )}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Large Files Results */}
+              {largeFiles && (
+                <div className="mt-8">
+                  <div className="flex items-center justify-between mb-4">
+                    <h3 className="text-lg font-bold">
+                      Large Files ({largeFiles.total_found} found,{" "}
+                      {largeFiles.total_size})
+                    </h3>
+                    <button
+                      onClick={() => setLargeFiles(null)}
+                      className="text-slate-400 hover:text-white text-sm"
+                    >
+                      Close
+                    </button>
+                  </div>
+                  <div className="bg-[#12121a] rounded-xl border border-white/10 overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-white/5">
+                        <tr>
+                          <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">
+                            User
+                          </th>
+                          <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">
+                            File
+                          </th>
+                          <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">
+                            Size
+                          </th>
+                          <th className="text-right px-4 py-3 text-sm font-medium text-slate-400">
+                            Actions
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/5">
+                        {largeFiles.files.map((file, i) => (
+                          <tr key={i} className="hover:bg-white/5">
+                            <td className="px-4 py-3 font-medium text-blue-400">
+                              {file.username}
+                            </td>
+                            <td className="px-4 py-3 text-slate-300 font-mono text-sm truncate max-w-xs">
+                              {file.path}
+                            </td>
+                            <td className="px-4 py-3 text-orange-400 font-medium">
+                              {file.size_human}
+                            </td>
+                            <td className="px-4 py-3 text-right">
+                              <button
+                                onClick={() =>
+                                  deleteFile(file.username, file.path)
+                                }
+                                className="p-1.5 rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 transition-colors"
+                                title="Delete"
+                              >
+                                <Trash2 size={14} />
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {largeFiles.files.length === 0 && (
+                      <div className="text-center py-12 text-slate-400">
+                        No large files found
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </main>
 
         {/* User Details Drawer */}
@@ -974,6 +1293,66 @@ function Admin() {
           </aside>
         )}
       </div>
+
+      {/* File Viewer Modal */}
+      {fileViewer && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="bg-[#12121a] rounded-2xl border border-white/10 w-full max-w-4xl max-h-[90vh] flex flex-col overflow-hidden">
+            {/* Header */}
+            <div className="flex items-center justify-between p-4 border-b border-white/10">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-lg bg-blue-500/10 flex items-center justify-center">
+                  <FileText size={20} className="text-blue-400" />
+                </div>
+                <div>
+                  <h3 className="font-medium">{fileViewer.filename}</h3>
+                  <p className="text-sm text-slate-400">
+                    {fileViewer.size} • {fileViewer.lines || 0} lines •{" "}
+                    {fileViewer.username}
+                  </p>
+                </div>
+              </div>
+              <button
+                onClick={() => setFileViewer(null)}
+                className="p-2 rounded-lg hover:bg-white/5 text-slate-400 hover:text-white transition-colors"
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-auto p-4">
+              {fileViewer.viewable ? (
+                <pre className="text-sm text-slate-300 font-mono whitespace-pre-wrap break-all bg-black/30 p-4 rounded-lg overflow-x-auto">
+                  {fileViewer.content}
+                </pre>
+              ) : (
+                <div className="text-center py-12">
+                  <AlertCircle
+                    size={48}
+                    className="mx-auto text-orange-400 mb-4"
+                  />
+                  <p className="text-lg font-medium mb-2">
+                    Cannot display file
+                  </p>
+                  <p className="text-slate-400">{fileViewer.reason}</p>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="flex items-center justify-between p-4 border-t border-white/10">
+              <p className="text-sm text-slate-500">Path: {fileViewer.path}</p>
+              <button
+                onClick={() => setFileViewer(null)}
+                className="px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-sm transition-colors"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

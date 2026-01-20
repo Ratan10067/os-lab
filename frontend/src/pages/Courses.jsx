@@ -8,7 +8,12 @@ import {
   CheckCircle,
   ChevronRight,
   Play,
-  Github,
+  HardDrive,
+  FileText,
+  Code,
+  Network,
+  Settings,
+  Loader,
 } from "lucide-react";
 import { courses } from "../data/courseData";
 import { useAuth } from "../context/AuthContext";
@@ -68,7 +73,30 @@ function Courses() {
     Terminal: Terminal,
     Cpu: Cpu,
     BookOpen: BookOpen,
+    HardDrive: HardDrive,
+    FileText: FileText,
+    Code: Code,
+    Network: Network,
+    Settings: Settings,
   };
+
+  // Loading skeleton component
+  const CourseSkeleton = () => (
+    <div className="bg-[#12121a]/50 border border-white/5 rounded-2xl p-6 animate-pulse">
+      <div className="flex items-start gap-4">
+        <div className="w-14 h-14 rounded-xl bg-white/10" />
+        <div className="flex-1">
+          <div className="h-6 bg-white/10 rounded w-3/4 mb-3" />
+          <div className="h-4 bg-white/5 rounded w-full mb-2" />
+          <div className="h-4 bg-white/5 rounded w-2/3 mb-4" />
+          <div className="flex gap-4">
+            <div className="h-4 bg-white/5 rounded w-20" />
+            <div className="h-4 bg-white/5 rounded w-20" />
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] text-white overflow-x-hidden">
@@ -129,7 +157,7 @@ function Courses() {
             </span>
           </h1>
           <p className="text-lg text-slate-400 max-w-2xl mx-auto">
-            Structured lessons with theory, examples, and hands-on challenges.
+            {courses.length} comprehensive courses from basics to advanced.
             Practice directly in the terminal.
           </p>
         </div>
@@ -138,102 +166,130 @@ function Courses() {
       {/* Courses Grid */}
       <section className="py-12">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="grid md:grid-cols-2 gap-6">
-            {courses.map((course) => {
-              const Icon = iconMap[course.icon] || BookOpen;
-              const prog = getCourseProgress(course.id);
+          {/* Loading State */}
+          {loading ? (
+            <div className="grid md:grid-cols-2 gap-6">
+              {[1, 2, 3, 4, 5, 6].map((i) => (
+                <CourseSkeleton key={i} />
+              ))}
+            </div>
+          ) : (
+            <div className="grid md:grid-cols-2 gap-6">
+              {courses.map((course) => {
+                const Icon = iconMap[course.icon] || BookOpen;
+                const prog = getCourseProgress(course.id);
 
-              return (
-                <Link
-                  key={course.id}
-                  to={`/courses/${course.id}`}
-                  className="group relative bg-[#12121a]/50 backdrop-blur-sm border border-white/5 rounded-2xl p-6 hover:border-white/10 hover:bg-[#12121a]/80 transition-all duration-300"
-                >
-                  {/* Progress indicator */}
-                  {user && prog.completed > 0 && (
-                    <div className="absolute top-4 right-4">
+                return (
+                  <Link
+                    key={course.id}
+                    to={`/courses/${course.id}`}
+                    className="group relative bg-[#12121a]/50 backdrop-blur-sm border border-white/5 rounded-2xl p-6 hover:border-white/10 hover:bg-[#12121a]/80 transition-all duration-300"
+                  >
+                    {/* Progress indicator */}
+                    {user && prog.completed > 0 && (
+                      <div className="absolute top-4 right-4">
+                        <div
+                          className={`text-xs font-medium px-2 py-1 rounded-full ${
+                            prog.percent === 100
+                              ? "bg-emerald-500/20 text-emerald-400"
+                              : "bg-blue-500/20 text-blue-400"
+                          }`}
+                        >
+                          {prog.percent === 100 ? (
+                            <span className="flex items-center gap-1">
+                              <CheckCircle size={12} /> Complete
+                            </span>
+                          ) : (
+                            `${prog.percent}%`
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Premium Badge */}
+                    {course.premium && (
+                      <div className="absolute top-4 left-4">
+                        <span className="text-xs font-semibold px-2 py-1 rounded-full bg-gradient-to-r from-amber-500 to-orange-500 text-white">
+                          ⭐ ADVANCED
+                        </span>
+                      </div>
+                    )}
+
+                    <div className="flex items-start gap-4">
                       <div
-                        className={`text-xs font-medium px-2 py-1 rounded-full ${
-                          prog.percent === 100
-                            ? "bg-emerald-500/20 text-emerald-400"
-                            : "bg-blue-500/20 text-blue-400"
+                        className={`w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 ${
+                          course.color === "emerald"
+                            ? "bg-emerald-500/10 text-emerald-400"
+                            : course.color === "blue"
+                              ? "bg-blue-500/10 text-blue-400"
+                              : course.color === "purple"
+                                ? "bg-purple-500/10 text-purple-400"
+                                : course.color === "red"
+                                  ? "bg-red-500/10 text-red-400"
+                                  : course.color === "orange"
+                                    ? "bg-orange-500/10 text-orange-400"
+                                    : course.color === "cyan"
+                                      ? "bg-cyan-500/10 text-cyan-400"
+                                      : course.color === "pink"
+                                        ? "bg-pink-500/10 text-pink-400"
+                                        : "bg-purple-500/10 text-purple-400"
                         }`}
                       >
-                        {prog.percent === 100 ? (
+                        <Icon size={28} />
+                      </div>
+
+                      <div className="flex-1 min-w-0">
+                        <h3 className="text-xl font-semibold mb-2 group-hover:text-white transition-colors">
+                          {course.title}
+                        </h3>
+                        <p className="text-sm text-slate-400 mb-4">
+                          {course.description}
+                        </p>
+
+                        <div className="flex items-center gap-4 text-xs text-slate-500">
                           <span className="flex items-center gap-1">
-                            <CheckCircle size={12} /> Complete
+                            <BookOpen size={14} />
+                            {course.lessons.length} lessons
                           </span>
-                        ) : (
-                          `${prog.percent}%`
+                          <span className="flex items-center gap-1">
+                            <Clock size={14} />
+                            {course.duration}
+                          </span>
+                        </div>
+
+                        {/* Progress bar */}
+                        {user && prog.total > 0 && (
+                          <div className="mt-4">
+                            <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  prog.percent === 100
+                                    ? "bg-emerald-500"
+                                    : "bg-blue-500"
+                                }`}
+                                style={{ width: `${prog.percent}%` }}
+                              />
+                            </div>
+                            <p className="text-xs text-slate-500 mt-2">
+                              {prog.completed} of {prog.total} lessons completed
+                            </p>
+                          </div>
                         )}
                       </div>
+
+                      <ChevronRight
+                        size={20}
+                        className="text-slate-600 group-hover:text-white group-hover:translate-x-1 transition-all flex-shrink-0"
+                      />
                     </div>
-                  )}
-
-                  <div className="flex items-start gap-4">
-                    <div
-                      className={`w-14 h-14 rounded-xl flex items-center justify-center flex-shrink-0 ${
-                        course.color === "emerald"
-                          ? "bg-emerald-500/10 text-emerald-400"
-                          : course.color === "blue"
-                            ? "bg-blue-500/10 text-blue-400"
-                            : "bg-purple-500/10 text-purple-400"
-                      }`}
-                    >
-                      <Icon size={28} />
-                    </div>
-
-                    <div className="flex-1 min-w-0">
-                      <h3 className="text-xl font-semibold mb-2 group-hover:text-white transition-colors">
-                        {course.title}
-                      </h3>
-                      <p className="text-sm text-slate-400 mb-4">
-                        {course.description}
-                      </p>
-
-                      <div className="flex items-center gap-4 text-xs text-slate-500">
-                        <span className="flex items-center gap-1">
-                          <BookOpen size={14} />
-                          {course.lessons.length} lessons
-                        </span>
-                        <span className="flex items-center gap-1">
-                          <Clock size={14} />
-                          {course.duration}
-                        </span>
-                      </div>
-
-                      {/* Progress bar */}
-                      {user && prog.total > 0 && (
-                        <div className="mt-4">
-                          <div className="h-1.5 bg-white/5 rounded-full overflow-hidden">
-                            <div
-                              className={`h-full rounded-full transition-all duration-500 ${
-                                prog.percent === 100
-                                  ? "bg-emerald-500"
-                                  : "bg-blue-500"
-                              }`}
-                              style={{ width: `${prog.percent}%` }}
-                            />
-                          </div>
-                          <p className="text-xs text-slate-500 mt-2">
-                            {prog.completed} of {prog.total} lessons completed
-                          </p>
-                        </div>
-                      )}
-                    </div>
-
-                    <ChevronRight
-                      size={20}
-                      className="text-slate-600 group-hover:text-white group-hover:translate-x-1 transition-all flex-shrink-0"
-                    />
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
 
           {/* Not logged in message */}
-          {!user && (
+          {!user && !loading && (
             <div className="mt-8 p-6 bg-[#12121a]/50 border border-white/5 rounded-xl text-center">
               <p className="text-slate-400 mb-4">
                 Sign in to track your learning progress

@@ -645,3 +645,120 @@ async def find_large_files(
         "total_size": format_size(sum(r["size_bytes"] for r in results)),
         "files": results[:50]  # Limit to 50 results
     }
+
+
+@router.get("/user/{username}/files/view")
+async def view_file_content(
+    username: str,
+    path: str = Query(..., description="Relative path to file to view"),
+    x_admin_secret: str = Header(None)
+):
+    """View the contents of a file (text files only, max 1MB)"""
+    verify_admin(x_admin_secret)
+    
+    folder_path = os.path.join(USERS_BASE_PATH, username)
+    
+    if not os.path.exists(folder_path):
+        raise HTTPException(status_code=404, detail="User folder not found")
+    
+    # Build target path safely
+    safe_path = os.path.normpath(path).lstrip(os.sep)
+    if safe_path.startswith('..'):
+        raise HTTPException(status_code=400, detail="Invalid path")
+    
+    target_path = os.path.join(folder_path, safe_path)
+    
+    # Ensure target is within user's folder
+    if not os.path.abspath(target_path).startswith(os.path.abspath(folder_path)):
+        raise HTTPException(status_code=400, detail="Path outside user folder")
+    
+    if not os.path.exists(target_path):
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    if os.path.isdir(target_path):
+        raise HTTPException(status_code=400, detail="Cannot view directory contents")
+    
+    # Check file size (max 1MB for viewing)
+    file_size = os.path.getsize(target_path)
+    max_size = 1024 * 1024  # 1MB
+    
+    if file_size > max_size:
+        return {
+            "filename": os.path.basename(path),
+            "path": path,
+            "size": format_size(file_size),
+            "viewable": False,
+            "reason": f"File too large ({format_size(file_size)}). Max viewable size is 1MB.",
+            "content": None
+        }
+    
+    # Try to read as text
+    try:
+        # Try common encodings
+        content = None
+        encoding_used = None
+        
+        for encoding in ['utf-8', 'latin-1', 'cp1252']:
+            try:
+                with open(target_path, 'r', encoding=encoding) as f:
+                    content = f.read()
+                    encoding_used = encoding
+                    break
+            except UnicodeDecodeError:
+                continue
+        
+        if content is None:
+            # Binary file
+            return {
+                "filename": os.path.basename(path),
+                "path": path,
+                "size": format_size(file_size),
+                "viewable": False,
+                "reason": "Binary file cannot be displayed as text",
+                "content": None
+            }
+        
+        # Detect file type for syntax highlighting hint
+        ext = os.path.splitext(path)[1].lower()
+        language_map = {
+            '.py': 'python',
+            '.js': 'javascript',
+            '.jsx': 'jsx',
+            '.ts': 'typescript',
+            '.tsx': 'tsx',
+            '.html': 'html',
+            '.css': 'css',
+            '.json': 'json',
+            '.md': 'markdown',
+            '.sh': 'bash',
+            '.bash': 'bash',
+            '.c': 'c',
+            '.cpp': 'cpp',
+            '.h': 'c',
+            '.java': 'java',
+            '.rb': 'ruby',
+            '.go': 'go',
+            '.rs': 'rust',
+            '.sql': 'sql',
+            '.yml': 'yaml',
+            '.yaml': 'yaml',
+            '.xml': 'xml',
+            '.txt': 'text',
+            '.log': 'text',
+            '.conf': 'text',
+            '.cfg': 'text',
+        }
+        
+        return {
+            "filename": os.path.basename(path),
+            "path": path,
+            "size": format_size(file_size),
+            "viewable": True,
+            "encoding": encoding_used,
+            "language": language_map.get(ext, 'text'),
+            "lines": content.count('\n') + 1,
+            "content": content
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error reading file: {e}")
