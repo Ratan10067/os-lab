@@ -97,14 +97,14 @@ function Lab() {
   const { isConnected, error, sendMessage, setMessageHandler, reconnect } =
     useWebSocket(wsUrlRef.current);
 
-  // Handle incoming data from server
-  setMessageHandler(
-    useCallback((data) => {
+  // Handle incoming data from server - set up in useEffect
+  useEffect(() => {
+    setMessageHandler((data) => {
       if (terminalRef.current) {
         terminalRef.current.write(data);
       }
-    }, []),
-  );
+    });
+  }, [setMessageHandler]);
 
   // Handle user input
   const handleTerminalData = useCallback(

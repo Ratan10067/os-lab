@@ -45,14 +45,14 @@ function Lesson() {
   const { isConnected, sendMessage, setMessageHandler, reconnect } =
     useWebSocket(wsUrl);
 
-  // Handle incoming data
-  setMessageHandler(
-    useCallback((data) => {
+  // Handle incoming data - set up message handler in useEffect
+  useEffect(() => {
+    setMessageHandler((data) => {
       if (terminalRef.current) {
         terminalRef.current.write(data);
       }
-    }, []),
-  );
+    });
+  }, [setMessageHandler]);
 
   // Handle terminal input
   const handleTerminalData = useCallback(

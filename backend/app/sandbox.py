@@ -66,7 +66,12 @@ class Sandbox:
         if use_proot:
             # Docker/Linux environment with proot
             # Extract username from folder path (e.g., /home/users/username -> username)
-            username = os.path.basename(self.user_folder) if self.user_folder else 'user'
+            # Handle None, empty string, or paths that result in empty basename
+            if self.user_folder and self.user_folder.strip():
+                extracted_name = os.path.basename(self.user_folder.rstrip('/'))
+                username = extracted_name if extracted_name else 'user'
+            else:
+                username = 'user'
             home_dir = f'/home/{username}'
             
             env.update({
@@ -150,10 +155,15 @@ builtin cd "$HOME" 2>/dev/null || true
 '''
             
             # Write the rcfile to the user's real folder (which is mounted to home_dir)
-            rcfile_path = os.path.join(self.user_folder or '/tmp', '.oslab_bashrc')
+            user_folder_path = self.user_folder if (self.user_folder and self.user_folder.strip()) else '/tmp'
+            rcfile_path = os.path.join(user_folder_path, '.oslab_bashrc')
+            rcfile_created = False
             try:
+                # Ensure directory exists
+                os.makedirs(user_folder_path, exist_ok=True)
                 with open(rcfile_path, 'w') as f:
                     f.write(rc_content)
+                rcfile_created = True
             except Exception as e:
                 logger.error(f"Failed to create proot rcfile: {e}")
             
@@ -162,16 +172,29 @@ builtin cd "$HOME" 2>/dev/null || true
             # -b: bind mount directories  
             # -w: set working directory
             # -0: simulate root user
-            cmd = [
-                '/usr/bin/proot',
-                '-r', rootfs_path,
-                '-b', '/dev',
-                '-b', '/proc',
-                '-b', f'{self.user_folder or "/tmp"}:{home_dir}',  # Mount user's real folder to /home/username
-                '-w', home_dir,
-                '-0',
-                '/bin/bash', '-i', '--rcfile', f'{home_dir}/.oslab_bashrc'  # Interactive mode with custom rcfile
-            ]
+            if rcfile_created:
+                cmd = [
+                    '/usr/bin/proot',
+                    '-r', rootfs_path,
+                    '-b', '/dev',
+                    '-b', '/proc',
+                    '-b', f'{user_folder_path}:{home_dir}',  # Mount user's real folder to /home/username
+                    '-w', home_dir,
+                    '-0',
+                    '/bin/bash', '-i', '--rcfile', f'{home_dir}/.oslab_bashrc'  # Interactive mode with custom rcfile
+                ]
+            else:
+                # Fallback: plain bash without custom rcfile
+                cmd = [
+                    '/usr/bin/proot',
+                    '-r', rootfs_path,
+                    '-b', '/dev',
+                    '-b', '/proc',
+                    '-b', f'{user_folder_path}:{home_dir}',
+                    '-w', home_dir,
+                    '-0',
+                    '/bin/bash', '-i'  # Just interactive bash
+                ]
             
             # Add HISTFILE to prevent history file issues
             env['HISTFILE'] = ''
@@ -179,7 +202,12 @@ builtin cd "$HOME" 2>/dev/null || true
         else:
             # Local development (macOS/Linux without proot)
             # Create a restricted shell environment that prevents escaping user's folder
-            username = os.path.basename(self.user_folder) if self.user_folder else 'user'
+            # Handle None, empty string, or paths that result in empty basename
+            if self.user_folder and self.user_folder.strip():
+                extracted_name = os.path.basename(self.user_folder.rstrip('/'))
+                username = extracted_name if extracted_name else 'user'
+            else:
+                username = 'user'
             
             env['TERM'] = 'xterm-256color'
             env['HOME'] = work_dir
@@ -261,14 +289,20 @@ builtin cd "$HOME" 2>/dev/null || true
             
             # Write the rcfile to the user's folder
             rcfile_path = os.path.join(work_dir, '.oslab_bashrc')
+            rcfile_created = False
             try:
                 with open(rcfile_path, 'w') as f:
                     f.write(rc_content)
+                rcfile_created = True
             except Exception as e:
                 logger.error(f"Failed to create rcfile: {e}")
             
             # Use bash with our custom rcfile
-            cmd = ['/bin/bash', '--rcfile', rcfile_path]
+            # Fall back to plain bash if rcfile wasn't created
+            if rcfile_created:
+                cmd = ['/bin/bash', '--rcfile', rcfile_path]
+            else:
+                cmd = ['/bin/bash']
             logger.info(f"Starting restricted bash for session {self.session_id}, user: {username}, folder: {work_dir}")
         
         # Start the process
