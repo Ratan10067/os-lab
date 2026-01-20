@@ -172,29 +172,17 @@ builtin cd "$HOME" 2>/dev/null || true
             # -b: bind mount directories  
             # -w: set working directory
             # -0: simulate root user
-            if rcfile_created:
-                cmd = [
-                    '/usr/bin/proot',
-                    '-r', rootfs_path,
-                    '-b', '/dev',
-                    '-b', '/proc',
-                    '-b', f'{user_folder_path}:{home_dir}',  # Mount user's real folder to /home/username
-                    '-w', home_dir,
-                    '-0',
-                    '/bin/bash', '-i', '--rcfile', f'{home_dir}/.oslab_bashrc'  # Interactive mode with custom rcfile
-                ]
-            else:
-                # Fallback: plain bash without custom rcfile
-                cmd = [
-                    '/usr/bin/proot',
-                    '-r', rootfs_path,
-                    '-b', '/dev',
-                    '-b', '/proc',
-                    '-b', f'{user_folder_path}:{home_dir}',
-                    '-w', home_dir,
-                    '-0',
-                    '/bin/bash', '-i'  # Just interactive bash
-                ]
+            # Note: Using just -i for interactive bash, PS1 is set via environment
+            cmd = [
+                '/usr/bin/proot',
+                '-r', rootfs_path,
+                '-b', '/dev',
+                '-b', '/proc',
+                '-b', f'{user_folder_path}:{home_dir}',  # Mount user's real folder to /home/username
+                '-w', home_dir,
+                '-0',
+                '/bin/bash', '-i'  # Interactive bash - relies on PS1 from env
+            ]
             
             # Add HISTFILE to prevent history file issues
             env['HISTFILE'] = ''
